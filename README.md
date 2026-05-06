@@ -3,7 +3,7 @@
 A pure-Rust library that translates ARMv7 (A32) assembly text into machine code.  
 **No native dependencies** – compiles natively and to WebAssembly via `wasm-pack`.
 
-[![Crates.io](https://img.shields.io/crates/v/armv7-asm-encoder?style=flat-square)](https://crates.io/crates/armv7-asm-encoder) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<!-- [![Crates.io](https://img.shields.io/crates/v/armv7-asm-encoder?style=flat-square)](https://crates.io/crates/armv7-asm-encoder) --> [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -36,7 +36,7 @@ Add the library to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-armv7-asm-encoder = "0.1.0"
+armv7-asm-encoder = { git = "https://github.com/Robby-cell/armv7-asm-encoder.git" }
 ```
 
 Then assemble some code:
