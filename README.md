@@ -3,7 +3,8 @@
 A pure-Rust library that translates ARMv7 (A32) assembly text into machine code.  
 **No native dependencies** – compiles natively and to WebAssembly via `wasm-pack`.
 
-<!-- [![Crates.io](https://img.shields.io/crates/v/armv7-asm-encoder?style=flat-square)](https://crates.io/crates/armv7-asm-encoder) --> [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<!-- [![Crates.io](https://img.shields.io/crates/v/armv7-asm-encoder?style=flat-square)](https://crates.io/crates/armv7-asm-encoder) -->
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
