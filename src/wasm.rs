@@ -11,7 +11,7 @@ use crate::resolver::{NoSymbolResolver, SymbolResolver};
 #[derive(Clone, Copy)]
 pub enum Endian {
     Little = 0,
-    Big = 1 << 30,
+    Big = 0x40000000,
 }
 
 impl From<Endian> for AV7Endian {
