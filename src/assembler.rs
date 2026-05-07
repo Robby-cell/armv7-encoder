@@ -67,7 +67,7 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
                     pool_entries.push(Statement {
                         label: Some(pool_lbl.clone()),
                         mnemonic: Mnemonic::Word,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![Operand::Label(lbl)],
                         line: stmt.line,
@@ -80,7 +80,7 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
                     pool_entries.push(Statement {
                         label: Some(pool_lbl.clone()),
                         mnemonic: Mnemonic::Word,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![Operand::Imm(val)],
                         line: stmt.line,
@@ -252,13 +252,13 @@ fn translate_statement(
 
         Mnemonic::DataProcessing(opcode) => {
             let (rd, rn, op2) = match stmt.operands.as_slice() {
-                [Operand::Reg(rd), op2] if matches!(opcode, DataOpcode::MOV | DataOpcode::MVN) => {
+                [Operand::Reg(rd), op2] if matches!(opcode, DataOpcode::Mov | DataOpcode::Mvn) => {
                     (*rd, None, op2_to_shifter(op2)?)
                 }
                 [Operand::Reg(rn), op2]
                     if matches!(
                         opcode,
-                        DataOpcode::CMP | DataOpcode::CMN | DataOpcode::TST | DataOpcode::TEQ
+                        DataOpcode::Cmp | DataOpcode::Cmn | DataOpcode::Tst | DataOpcode::Teq
                     ) =>
                 {
                     (Register::R0, Some(*rn), op2_to_shifter(op2)?)
@@ -300,7 +300,7 @@ fn translate_statement(
                         load,
                         byte: false,
                         rd: *rd,
-                        addressing: AddressingMode::OffsetImmediate(Register::PC, offset),
+                        addressing: AddressingMode::OffsetImmediate(Register::Pc, offset),
                     })
                 }
                 _ => Err(AsmError::ParseError {
@@ -329,7 +329,7 @@ fn translate_statement(
                         load,
                         byte: true,
                         rd: *rd,
-                        addressing: AddressingMode::OffsetImmediate(Register::PC, offset),
+                        addressing: AddressingMode::OffsetImmediate(Register::Pc, offset),
                     })
                 }
                 _ => Err(AsmError::ParseError {

@@ -223,7 +223,7 @@ match assemble(source) {
 Build with `wasm-pack`:
 
 ```bash
-wasm-pack build --target web
+wasm-pack build --target web --features wasm
 ```
 
 Then use in JavaScript:

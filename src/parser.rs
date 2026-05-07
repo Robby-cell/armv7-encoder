@@ -31,9 +31,9 @@ fn register(input: &str) -> IResult<&str, Register> {
         "r10" | "v7" | "sl" => Register::R10,
         "r11" | "v8" | "fp" => Register::R11,
         "r12" | "ip" => Register::R12,
-        "r13" | "sp" => Register::SP,
-        "r14" | "lr" => Register::LR,
-        "r15" | "pc" => Register::PC,
+        "r13" | "sp" => Register::Sp,
+        "r14" | "lr" => Register::Lr,
+        "r15" | "pc" => Register::Pc,
         _ => {
             return Err(nom::Err::Error(nom::error::Error::new(
                 input,
@@ -154,21 +154,21 @@ fn label_name(input: &str) -> IResult<&str, String> {
 
 fn condition_parser(input: &str) -> IResult<&str, Condition> {
     alt((
-        value(Condition::EQ, tag_no_case("eq")),
-        value(Condition::NE, tag_no_case("ne")),
-        value(Condition::CS, tag_no_case("cs")),
-        value(Condition::CC, tag_no_case("cc")),
-        value(Condition::MI, tag_no_case("mi")),
-        value(Condition::PL, tag_no_case("pl")),
-        value(Condition::VS, tag_no_case("vs")),
-        value(Condition::VC, tag_no_case("vc")),
-        value(Condition::HI, tag_no_case("hi")),
-        value(Condition::LS, tag_no_case("ls")),
-        value(Condition::GE, tag_no_case("ge")),
-        value(Condition::LT, tag_no_case("lt")),
-        value(Condition::GT, tag_no_case("gt")),
-        value(Condition::LE, tag_no_case("le")),
-        value(Condition::AL, tag_no_case("al")),
+        value(Condition::Eq, tag_no_case("eq")),
+        value(Condition::Ne, tag_no_case("ne")),
+        value(Condition::Cs, tag_no_case("cs")),
+        value(Condition::Cc, tag_no_case("cc")),
+        value(Condition::Mi, tag_no_case("mi")),
+        value(Condition::Pl, tag_no_case("pl")),
+        value(Condition::Vs, tag_no_case("vs")),
+        value(Condition::Vc, tag_no_case("vc")),
+        value(Condition::Hi, tag_no_case("hi")),
+        value(Condition::Ls, tag_no_case("ls")),
+        value(Condition::Ge, tag_no_case("ge")),
+        value(Condition::Lt, tag_no_case("lt")),
+        value(Condition::Gt, tag_no_case("gt")),
+        value(Condition::Le, tag_no_case("le")),
+        value(Condition::Al, tag_no_case("al")),
     ))
     .parse(input)
 }
@@ -228,7 +228,7 @@ fn shifter_operand(input: &str) -> IResult<&str, ShifterOperand> {
             Ok((input, ShifterOperand::ImmediateShift(rm, st, imm)))
         }
         Some((st, Some(ShiftAmount::Register(rs)))) => {
-            if rs == Register::PC {
+            if rs == Register::Pc {
                 return Err(nom::Err::Error(nom::error::Error::new(
                     input,
                     nom::error::ErrorKind::Tag,
@@ -353,7 +353,7 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
             remaining,
             MnemonicInfo {
                 op: Mnemonic::It,
-                condition: Condition::AL,
+                condition: Condition::Al,
                 set_flags: false,
             },
         ));
@@ -365,22 +365,22 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
         ("push", Mnemonic::Push),
         ("pop", Mnemonic::Pop),
         ("mul", Mnemonic::Mul),
-        ("and", Mnemonic::DataProcessing(DataOpcode::AND)),
-        ("eor", Mnemonic::DataProcessing(DataOpcode::EOR)),
-        ("sub", Mnemonic::DataProcessing(DataOpcode::SUB)),
-        ("rsb", Mnemonic::DataProcessing(DataOpcode::RSB)),
-        ("add", Mnemonic::DataProcessing(DataOpcode::ADD)),
-        ("adc", Mnemonic::DataProcessing(DataOpcode::ADC)),
-        ("sbc", Mnemonic::DataProcessing(DataOpcode::SBC)),
-        ("rsc", Mnemonic::DataProcessing(DataOpcode::RSC)),
-        ("tst", Mnemonic::DataProcessing(DataOpcode::TST)),
-        ("teq", Mnemonic::DataProcessing(DataOpcode::TEQ)),
-        ("cmp", Mnemonic::DataProcessing(DataOpcode::CMP)),
-        ("cmn", Mnemonic::DataProcessing(DataOpcode::CMN)),
-        ("orr", Mnemonic::DataProcessing(DataOpcode::ORR)),
-        ("mov", Mnemonic::DataProcessing(DataOpcode::MOV)),
-        ("bic", Mnemonic::DataProcessing(DataOpcode::BIC)),
-        ("mvn", Mnemonic::DataProcessing(DataOpcode::MVN)),
+        ("and", Mnemonic::DataProcessing(DataOpcode::And)),
+        ("eor", Mnemonic::DataProcessing(DataOpcode::Eor)),
+        ("sub", Mnemonic::DataProcessing(DataOpcode::Sub)),
+        ("rsb", Mnemonic::DataProcessing(DataOpcode::Rsb)),
+        ("add", Mnemonic::DataProcessing(DataOpcode::Add)),
+        ("adc", Mnemonic::DataProcessing(DataOpcode::Adc)),
+        ("sbc", Mnemonic::DataProcessing(DataOpcode::Sbc)),
+        ("rsc", Mnemonic::DataProcessing(DataOpcode::Rsc)),
+        ("tst", Mnemonic::DataProcessing(DataOpcode::Tst)),
+        ("teq", Mnemonic::DataProcessing(DataOpcode::Teq)),
+        ("cmp", Mnemonic::DataProcessing(DataOpcode::Cmp)),
+        ("cmn", Mnemonic::DataProcessing(DataOpcode::Cmn)),
+        ("orr", Mnemonic::DataProcessing(DataOpcode::Orr)),
+        ("mov", Mnemonic::DataProcessing(DataOpcode::Mov)),
+        ("bic", Mnemonic::DataProcessing(DataOpcode::Bic)),
+        ("mvn", Mnemonic::DataProcessing(DataOpcode::Mvn)),
         ("ldr", Mnemonic::Ldr),
         ("str", Mnemonic::Str),
         ("bl", Mnemonic::Bl),
@@ -400,7 +400,7 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
         if let Some(rest) = token_lower.strip_prefix(name) {
             let mut s = rest;
             let mut set_flags = false;
-            let mut cond = Condition::AL;
+            let mut cond = Condition::Al;
 
             if let Some(r) = s.strip_suffix('s') {
                 set_flags = true;
@@ -421,7 +421,7 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
             if matches!(
                 op,
                 Mnemonic::DataProcessing(
-                    DataOpcode::CMP | DataOpcode::CMN | DataOpcode::TST | DataOpcode::TEQ
+                    DataOpcode::Cmp | DataOpcode::Cmn | DataOpcode::Tst | DataOpcode::Teq
                 )
             ) {
                 set_flags = true;
@@ -446,13 +446,13 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
 
 fn parse_data_proc_operands(input: &str, opcode: DataOpcode) -> IResult<&str, Vec<Operand>> {
     match opcode {
-        DataOpcode::MOV | DataOpcode::MVN => {
+        DataOpcode::Mov | DataOpcode::Mvn => {
             let (input, rd) = register(input)?;
             let (input, _) = (sp, char(','), sp).parse(input)?;
             let (input, op2) = shifter_operand(input)?;
             Ok((input, vec![Operand::Reg(rd), Operand::Shifter(op2)]))
         }
-        DataOpcode::CMP | DataOpcode::CMN | DataOpcode::TST | DataOpcode::TEQ => {
+        DataOpcode::Cmp | DataOpcode::Cmn | DataOpcode::Tst | DataOpcode::Teq => {
             let (input, rn) = register(input)?;
             let (input, _) = (sp, char(','), sp).parse(input)?;
             let (input, op2) = shifter_operand(input)?;
@@ -593,7 +593,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
             Statement {
                 label,
                 mnemonic: Mnemonic::LabelOnly,
-                condition: Condition::AL,
+                condition: Condition::Al,
                 s_flag: false,
                 operands: vec![],
                 line: 0,
@@ -612,7 +612,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     Statement {
                         label,
                         mnemonic: Mnemonic::Global,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![Operand::Label(lbl)],
                         line: 0,
@@ -630,7 +630,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     Statement {
                         label,
                         mnemonic: mnem,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![],
                         line: 0,
@@ -644,7 +644,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     Statement {
                         label,
                         mnemonic: Mnemonic::Align,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![Operand::Imm(val)],
                         line: 0,
@@ -663,7 +663,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     Statement {
                         label,
                         mnemonic: mnem,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![Operand::StringBytes(string_val.into_bytes())],
                         line: 0,
@@ -677,7 +677,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     Statement {
                         label,
                         mnemonic: Mnemonic::Float,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![Operand::Float(val)],
                         line: 0,
@@ -695,7 +695,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     Statement {
                         label,
                         mnemonic: Mnemonic::Word,
-                        condition: Condition::AL,
+                        condition: Condition::Al,
                         s_flag: false,
                         operands: vec![op],
                         line: 0,

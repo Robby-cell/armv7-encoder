@@ -15,9 +15,9 @@ pub enum Register {
     R10,
     R11,
     R12,
-    SP,
-    LR,
-    PC,
+    Sp,
+    Lr,
+    Pc,
 }
 
 impl Register {
@@ -36,50 +36,50 @@ impl Register {
             Register::R10 => 10,
             Register::R11 => 11,
             Register::R12 => 12,
-            Register::SP => 13,
-            Register::LR => 14,
-            Register::PC => 15,
+            Register::Sp => 13,
+            Register::Lr => 14,
+            Register::Pc => 15,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Condition {
-    EQ,
-    NE,
-    CS,
-    CC,
-    MI,
-    PL,
-    VS,
-    VC,
-    HI,
-    LS,
-    GE,
-    LT,
-    GT,
-    LE,
-    AL,
+    Eq,
+    Ne,
+    Cs,
+    Cc,
+    Mi,
+    Pl,
+    Vs,
+    Vc,
+    Hi,
+    Ls,
+    Ge,
+    Lt,
+    Gt,
+    Le,
+    Al,
 }
 
 impl Condition {
     pub fn code(self) -> u32 {
         match self {
-            Condition::EQ => 0b0000,
-            Condition::NE => 0b0001,
-            Condition::CS => 0b0010,
-            Condition::CC => 0b0011,
-            Condition::MI => 0b0100,
-            Condition::PL => 0b0101,
-            Condition::VS => 0b0110,
-            Condition::VC => 0b0111,
-            Condition::HI => 0b1000,
-            Condition::LS => 0b1001,
-            Condition::GE => 0b1010,
-            Condition::LT => 0b1011,
-            Condition::GT => 0b1100,
-            Condition::LE => 0b1101,
-            Condition::AL => 0b1110,
+            Condition::Eq => 0b0000,
+            Condition::Ne => 0b0001,
+            Condition::Cs => 0b0010,
+            Condition::Cc => 0b0011,
+            Condition::Mi => 0b0100,
+            Condition::Pl => 0b0101,
+            Condition::Vs => 0b0110,
+            Condition::Vc => 0b0111,
+            Condition::Hi => 0b1000,
+            Condition::Ls => 0b1001,
+            Condition::Ge => 0b1010,
+            Condition::Lt => 0b1011,
+            Condition::Gt => 0b1100,
+            Condition::Le => 0b1101,
+            Condition::Al => 0b1110,
         }
     }
 }
@@ -116,43 +116,43 @@ pub enum ShifterOperand {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DataOpcode {
-    AND,
-    EOR,
-    SUB,
-    RSB,
-    ADD,
-    ADC,
-    SBC,
-    RSC,
-    TST,
-    TEQ,
-    CMP,
-    CMN,
-    ORR,
-    MOV,
-    BIC,
-    MVN,
+    And,
+    Eor,
+    Sub,
+    Rsb,
+    Add,
+    Adc,
+    Sbc,
+    Rsc,
+    Tst,
+    Teq,
+    Cmp,
+    Cmn,
+    Orr,
+    Mov,
+    Bic,
+    Mvn,
 }
 
 impl DataOpcode {
     pub fn code(self) -> u32 {
         match self {
-            DataOpcode::AND => 0b0000,
-            DataOpcode::EOR => 0b0001,
-            DataOpcode::SUB => 0b0010,
-            DataOpcode::RSB => 0b0011,
-            DataOpcode::ADD => 0b0100,
-            DataOpcode::ADC => 0b0101,
-            DataOpcode::SBC => 0b0110,
-            DataOpcode::RSC => 0b0111,
-            DataOpcode::TST => 0b1000,
-            DataOpcode::TEQ => 0b1001,
-            DataOpcode::CMP => 0b1010,
-            DataOpcode::CMN => 0b1011,
-            DataOpcode::ORR => 0b1100,
-            DataOpcode::MOV => 0b1101,
-            DataOpcode::BIC => 0b1110,
-            DataOpcode::MVN => 0b1111,
+            DataOpcode::And => 0b0000,
+            DataOpcode::Eor => 0b0001,
+            DataOpcode::Sub => 0b0010,
+            DataOpcode::Rsb => 0b0011,
+            DataOpcode::Add => 0b0100,
+            DataOpcode::Adc => 0b0101,
+            DataOpcode::Sbc => 0b0110,
+            DataOpcode::Rsc => 0b0111,
+            DataOpcode::Tst => 0b1000,
+            DataOpcode::Teq => 0b1001,
+            DataOpcode::Cmp => 0b1010,
+            DataOpcode::Cmn => 0b1011,
+            DataOpcode::Orr => 0b1100,
+            DataOpcode::Mov => 0b1101,
+            DataOpcode::Bic => 0b1110,
+            DataOpcode::Mvn => 0b1111,
         }
     }
 }
@@ -410,7 +410,7 @@ fn encode_shifter_operand(
             Ok((0, ((shift_imm << 7) | (shift_code << 5)) | rm.code()))
         }
         ShifterOperand::RegisterShift(rm, shift, rs) => {
-            if *rs == Register::PC {
+            if *rs == Register::Pc {
                 return Err(AsmError::InvalidShift {
                     line: 0,
                     message: "PC not allowed as shift register".into(),
