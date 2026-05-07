@@ -3,7 +3,7 @@
 A pure-Rust library that translates ARMv7 (A32) assembly text into machine code.  
 **No native dependencies** – compiles natively and to WebAssembly via `wasm-pack`.
 
-<!-- [![Crates.io](https://img.shields.io/crates/v/armv7-asm-encoder?style=flat-square)](https://crates.io/crates/armv7-asm-encoder) -->
+<!-- [![Crates.io](https://img.shields.io/crates/v/armv7-encoder?style=flat-square)](https://crates.io/crates/armv7-encoder) -->
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
@@ -37,13 +37,13 @@ Add the library to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-armv7-asm-encoder = { git = "https://github.com/Robby-cell/armv7-asm-encoder.git" }
+armv7-encoder = { git = "https://github.com/Robby-cell/armv7-encoder.git" }
 ```
 
 Then assemble some code:
 
 ```rust
-use armv7_asm_encoder::prelude::*;
+use armv7_encoder::prelude::*;
 
 fn main() {
     let source = r#"
@@ -94,8 +94,8 @@ Doesn’t resolve any external symbol.
 Use the `symbols!` macro for quick construction:
 
 ```rust
-use armv7_asm_encoder::resolver::HashMapSymbolResolver;
-use armv7_asm_encoder::symbols;
+use armv7_encoder::resolver::HashMapSymbolResolver;
+use armv7_encoder::symbols;
 
 let resolver = symbols!(
     ("puts",   0x1234),
@@ -199,7 +199,7 @@ wasm-pack build --target web
 Then use in JavaScript:
 
 ```javascript
-import { assemble } from "./pkg/armv7_asm_encoder.js";
+import { assemble } from "./pkg/armv7_encoder.js";
 const bytes = assemble("mov r0, #1");
 console.log(new Uint32Array(bytes.buffer));
 ```
