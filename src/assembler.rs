@@ -57,37 +57,37 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
     let mut pool_id = 0;
 
     for stmt in &mut statements {
-        if matches!(stmt.mnemonic, Mnemonic::Ldr)
-            && let Some(op) = stmt.operands.get(1).cloned()
-        {
-            match op {
-                Operand::PseudoLoadLabel(lbl) => {
-                    let pool_lbl = format!("__pool_{}", pool_id);
-                    pool_id += 1;
-                    pool_entries.push(Statement {
-                        label: Some(pool_lbl.clone()),
-                        mnemonic: Mnemonic::Word,
-                        condition: Condition::AL,
-                        s_flag: false,
-                        operands: vec![Operand::Label(lbl)],
-                        line: stmt.line,
-                    });
-                    stmt.operands[1] = Operand::Label(pool_lbl);
+        if matches!(stmt.mnemonic, Mnemonic::Ldr) {
+            if let Some(op) = stmt.operands.get(1).cloned() {
+                match op {
+                    Operand::PseudoLoadLabel(lbl) => {
+                        let pool_lbl = format!("__pool_{}", pool_id);
+                        pool_id += 1;
+                        pool_entries.push(Statement {
+                            label: Some(pool_lbl.clone()),
+                            mnemonic: Mnemonic::Word,
+                            condition: Condition::AL,
+                            s_flag: false,
+                            operands: vec![Operand::Label(lbl)],
+                            line: stmt.line,
+                        });
+                        stmt.operands[1] = Operand::Label(pool_lbl);
+                    }
+                    Operand::PseudoLoadImm(val) => {
+                        let pool_lbl = format!("__pool_{}", pool_id);
+                        pool_id += 1;
+                        pool_entries.push(Statement {
+                            label: Some(pool_lbl.clone()),
+                            mnemonic: Mnemonic::Word,
+                            condition: Condition::AL,
+                            s_flag: false,
+                            operands: vec![Operand::Imm(val)],
+                            line: stmt.line,
+                        });
+                        stmt.operands[1] = Operand::Label(pool_lbl);
+                    }
+                    _ => {}
                 }
-                Operand::PseudoLoadImm(val) => {
-                    let pool_lbl = format!("__pool_{}", pool_id);
-                    pool_id += 1;
-                    pool_entries.push(Statement {
-                        label: Some(pool_lbl.clone()),
-                        mnemonic: Mnemonic::Word,
-                        condition: Condition::AL,
-                        s_flag: false,
-                        operands: vec![Operand::Imm(val)],
-                        line: stmt.line,
-                    });
-                    stmt.operands[1] = Operand::Label(pool_lbl);
-                }
-                _ => {}
             }
         }
     }
@@ -119,7 +119,7 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
             Mnemonic::Align => {
                 if let Operand::Imm(val) = stmt.operands[0] {
                     let align_bytes = 1 << val;
-                    if current_addr.is_multiple_of(align_bytes) {
+                    if current_addr % align_bytes == 0 {
                         0
                     } else {
                         align_bytes - (current_addr % align_bytes)
@@ -174,7 +174,7 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
             Mnemonic::Align => {
                 if let Operand::Imm(val) = stmt.operands[0] {
                     let align_bytes = 1 << val;
-                    let pad = if current_addr.is_multiple_of(align_bytes) {
+                    let pad = if current_addr % align_bytes == 0 {
                         0
                     } else {
                         align_bytes - (current_addr % align_bytes)
@@ -300,14 +300,7 @@ fn translate_statement(
                         load,
                         byte: false,
                         rd: *rd,
-                        addressing: AddressingMode::OffsetImmediate(
-                            Register::PC,
-                            offset.try_into().map_err(|_| AsmError::ParseError {
-                                line: stmt.line,
-                                col: 0,
-                                message: "label too far for PC-relative load".into(),
-                            })?,
-                        ),
+                        addressing: AddressingMode::OffsetImmediate(Register::PC, offset),
                     })
                 }
                 _ => Err(AsmError::ParseError {
@@ -336,14 +329,7 @@ fn translate_statement(
                         load,
                         byte: true,
                         rd: *rd,
-                        addressing: AddressingMode::OffsetImmediate(
-                            Register::PC,
-                            offset.try_into().map_err(|_| AsmError::ParseError {
-                                line: stmt.line,
-                                col: 0,
-                                message: "label too far for PC-relative load".into(),
-                            })?,
-                        ),
+                        addressing: AddressingMode::OffsetImmediate(Register::PC, offset),
                     })
                 }
                 _ => Err(AsmError::ParseError {
@@ -435,7 +421,28 @@ fn translate_statement(
                 })
             }
         }
-        Mnemonic::Nop => Ok(Instruction::RawWord((cond.code() << 28) | 0x0320f000)),
+        Mnemonic::Nop => Ok(Instruction::Hint { cond, hint: 0 }),
+        Mnemonic::Yield => Ok(Instruction::Hint { cond, hint: 1 }),
+        Mnemonic::Wfe => Ok(Instruction::Hint { cond, hint: 2 }),
+        Mnemonic::Wfi => Ok(Instruction::Hint { cond, hint: 3 }),
+        Mnemonic::Sev => Ok(Instruction::Hint { cond, hint: 4 }),
+        Mnemonic::Bkpt => {
+            if let [Operand::Imm(imm)] = &stmt.operands[..] {
+                if *imm > 0xFFFF {
+                    return Err(AsmError::ImmediateOutOfRange {
+                        line: stmt.line,
+                        value: *imm,
+                    });
+                }
+                Ok(Instruction::Bkpt { imm: *imm as u16 })
+            } else {
+                Err(AsmError::ParseError {
+                    line: stmt.line,
+                    col: 0,
+                    message: "BKPT requires an immediate value".into(),
+                })
+            }
+        }
         Mnemonic::Word => {
             let val = match &stmt.operands[0] {
                 Operand::Imm(v) => *v,

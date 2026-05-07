@@ -202,6 +202,13 @@ pub enum Instruction {
         cond: Condition,
         imm: u32,
     },
+    Hint {
+        cond: Condition,
+        hint: u8,
+    },
+    Bkpt {
+        imm: u16,
+    },
     RawWord(u32),
 }
 
@@ -309,7 +316,6 @@ pub fn encode_instruction(instr: &Instruction) -> Result<u32, AsmError> {
         }
         Instruction::Push { cond, reg_list } => {
             let cond_code = cond.code() << 28;
-            // Optimize single register push to STR Rd,[SP, #-4]!
             if reg_list.len() == 1 {
                 let rd_code = reg_list[0].code() << 12;
                 Ok(cond_code | 0x052D0004 | rd_code)
@@ -323,7 +329,6 @@ pub fn encode_instruction(instr: &Instruction) -> Result<u32, AsmError> {
         }
         Instruction::Pop { cond, reg_list } => {
             let cond_code = cond.code() << 28;
-            // Optimize single register pop to LDR Rd,[SP], #4
             if reg_list.len() == 1 {
                 let rd_code = reg_list[0].code() << 12;
                 Ok(cond_code | 0x049D0004 | rd_code)
@@ -359,6 +364,17 @@ pub fn encode_instruction(instr: &Instruction) -> Result<u32, AsmError> {
         Instruction::Svc { cond, imm } => {
             let cond_code = cond.code() << 28;
             Ok(cond_code | 0x0F000000 | (*imm & 0x00FFFFFF))
+        }
+        Instruction::Hint { cond, hint } => {
+            let cond_code = cond.code() << 28;
+            Ok(cond_code | 0x0320F000 | (*hint as u32))
+        }
+        Instruction::Bkpt { imm } => {
+            let imm32 = *imm as u32;
+            let imm12 = (imm32 >> 4) & 0xFFF;
+            let imm4 = imm32 & 0xF;
+            // The ARM BKPT instruction is unconditionally executed, encoded implicitly via condition AL (1110)
+            Ok(0xE1200070 | (imm12 << 8) | imm4)
         }
         Instruction::RawWord(val) => Ok(*val),
     }

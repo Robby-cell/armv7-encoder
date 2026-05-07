@@ -300,6 +300,11 @@ pub enum Mnemonic {
     LabelOnly,
     It,
     Float,
+    Bkpt,
+    Wfi,
+    Wfe,
+    Yield,
+    Sev,
 }
 
 #[derive(Debug, Clone)]
@@ -314,8 +319,8 @@ pub enum Operand {
     PseudoLoadImm(u32),
     StringBytes(Vec<u8>),
 
+    // TODO: Unused field
     #[allow(unused)]
-    // TODO: Unused in the eyes of the compiler
     Cond(Condition),
 
     Float(f32),
@@ -339,18 +344,18 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
     let (remaining, token) = take_while1(|c: char| c.is_alphabetic()).parse(input)?;
     let token_lower = token.to_lowercase();
 
-    if let Some(rest) = token_lower.strip_prefix("it")
-        && (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e'))
-        && rest.len() <= 3
-    {
-        return Ok((
-            remaining,
-            MnemonicInfo {
-                op: Mnemonic::It,
-                condition: Condition::AL,
-                set_flags: false,
-            },
-        ));
+    // Nightly un-nested logic
+    if let Some(rest) = token_lower.strip_prefix("it") {
+        if (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e')) && rest.len() <= 3 {
+            return Ok((
+                remaining,
+                MnemonicInfo {
+                    op: Mnemonic::It,
+                    condition: Condition::AL,
+                    set_flags: false,
+                },
+            ));
+        }
     }
 
     let bases = [
@@ -383,6 +388,11 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
         ("svc", Mnemonic::Svc),
         ("swi", Mnemonic::Svc),
         ("nop", Mnemonic::Nop),
+        ("bkpt", Mnemonic::Bkpt),
+        ("wfi", Mnemonic::Wfi),
+        ("wfe", Mnemonic::Wfe),
+        ("yield", Mnemonic::Yield),
+        ("sev", Mnemonic::Sev),
     ];
 
     for (name, op) in bases.iter() {
@@ -525,7 +535,13 @@ fn parse_operands_for_mnemonic<'a>(
             let (input, imm) = immediate(input)?;
             Ok((input, vec![Operand::Imm(imm)]))
         }
-        Mnemonic::Nop => Ok((input, vec![])),
+        Mnemonic::Bkpt => {
+            let (input, imm) = immediate(input)?;
+            Ok((input, vec![Operand::Imm(imm)]))
+        }
+        Mnemonic::Nop | Mnemonic::Wfi | Mnemonic::Wfe | Mnemonic::Yield | Mnemonic::Sev => {
+            Ok((input, vec![]))
+        }
         _ => unreachable!(),
     }
 }
