@@ -3,24 +3,22 @@
 use js_sys::Function;
 use wasm_bindgen::prelude::*;
 
-use crate::assembler::{
-    AssemblerOptions, Encoder as CoreEncoder, Endian, assemble, assemble_with_options,
-};
+use crate::assembler::{AssemblerOptions, Encoder as CoreEncoder, Endian as AV7Endian, assemble};
 use crate::resolver::{NoSymbolResolver, SymbolResolver};
 
 /// Endianness options natively exposed to WASM.
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
-pub enum WasmEndian {
+pub enum Endian {
     Little = 0,
-    Big = 1,
+    Big = 1 << 30,
 }
 
-impl From<WasmEndian> for Endian {
-    fn from(e: WasmEndian) -> Self {
+impl From<Endian> for AV7Endian {
+    fn from(e: Endian) -> Self {
         match e {
-            WasmEndian::Little => Endian::Little,
-            WasmEndian::Big => Endian::Big,
+            Endian::Little => AV7Endian::Little,
+            Endian::Big => AV7Endian::Big,
         }
     }
 }
@@ -49,7 +47,7 @@ impl SymbolResolver for JsSymbolResolver {
 #[wasm_bindgen]
 pub struct Encoder {
     start_address: u32,
-    endian: WasmEndian,
+    endian: Endian,
     resolver_func: Option<Function>,
 }
 
@@ -61,10 +59,14 @@ impl Encoder {
     /// and returning a number (or null/undefined if unknown).
     /// Example: `(name) => name === "led0" ? 0x40000000 : null`
     #[wasm_bindgen(constructor)]
-    pub fn new(start_address: u32, endian: WasmEndian, resolver_func: Option<Function>) -> Self {
+    pub fn new(
+        start_address: Option<u32>,
+        endian: Option<Endian>,
+        resolver_func: Option<Function>,
+    ) -> Self {
         Self {
-            start_address,
-            endian,
+            start_address: start_address.unwrap_or(0),
+            endian: endian.unwrap_or(Endian::Little),
             resolver_func,
         }
     }
@@ -101,7 +103,7 @@ pub fn assemble_armv7(source: &str) -> Result<Vec<u8>, JsError> {
 pub fn assemble_armv7_big_endian(source: &str) -> Result<Vec<u8>, JsError> {
     let options = AssemblerOptions {
         start_address: 0,
-        endian: Endian::Big,
+        endian: AV7Endian::Big,
         symbol_resolver: Box::new(NoSymbolResolver),
     };
 

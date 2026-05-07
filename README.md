@@ -229,9 +229,16 @@ wasm-pack build --target web --features wasm
 Then use in JavaScript:
 
 ```javascript
-import { assemble } from "./pkg/armv7_encoder.js";
-const bytes = assemble("mov r0, #1");
-console.log(new Uint32Array(bytes.buffer));
+import {Endian, Encoder} from './pkg/armv7_encoder.js'
+
+const e = new Encoder(0, Endian.Little, (s) => {
+    switch (s) {
+        case "foo": return 0x1234
+        default: return null
+    }
+})
+const bytes = e.assemble("ldr r0, =foo; add r0, r0, #42; svc 0")
+console.log(bytes)
 ```
 
 ---
