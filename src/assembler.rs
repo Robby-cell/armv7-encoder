@@ -7,8 +7,9 @@ use std::collections::HashMap;
 /// Endianness selection with distinct discriminants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Endian {
-    /// Big‑endian mode – numeric value 0xDEAD_BEEF.
-    Big = 0xDEAD_BEEF,
+    /// Big‑endian mode – numeric value.
+    Big = 1 << 30,
+
     /// Little‑endian mode – numeric value 0.
     Little = 0,
 }
