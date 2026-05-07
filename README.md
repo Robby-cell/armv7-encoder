@@ -10,24 +10,54 @@ A pure-Rust library that translates ARMv7 (A32) assembly text into machine code.
 
 ## Features
 
-- Full data‑processing instructions (MOV, ADD, SUB, AND, ORR, EOR, BIC, MVN, RSB, RSC, ADC, SBC, CMP, CMN, TST, TEQ)
-- Shifter operands: immediate, register, shifted register (LSL, LSR, ASR, ROR, RRX) by immediate or register
-- Load/store: LDR, STR, LDRB, STRB with immediate, register, and scaled register offsets
-- Branches: B, BL, BX
-- Multiply: MUL
-- Stack: PUSH, POP
-- Supervisor call: SVC
-- NOP
-- Condition codes and `S` flag (e.g. `addeq`, `movs`)
-- Labels and branches with local resolution
-- Symbol resolver trait – plug in your own resolver (closure, HashMap, etc.)
-- Directives: `.word`, `.float`, `.align`, `.ascii`, `.asciz`, `.global`, `.text`, `.data`
-- Pseudo‑instruction `LDR Rd, =immediate` (with literal pool)
-- Multiple statements per line separated by `;`
-- `@` line comments
-- Endianness selection (Little/Big)
-- Custom start address
-- Clear error reporting with line and column numbers
+- **Full data‑processing instructions**  
+  MOV, MVN, ADD, SUB, RSB, ADC, SBC, RSC, AND, ORR, EOR, BIC  
+  CMP, CMN, TST, TEQ (with automatic `S` flag)
+
+- **Flexible shifter operands**  
+  Immediate (`#123`, `#0xFF`), register, shifted register by immediate or register  
+  (LSL, LSR, ASR, ROR, RRX)
+
+- **Load / Store**  
+  LDR, STR, LDRB, STRB – immediate, register, and scaled register offsets  
+  PC‑relative `LDR Rd, label` (assembles to `LDR Rd, [PC, #offset]`)  
+  Pseudo‑instruction `LDR Rd, =immediate` (literal pool)
+
+- **Multiply**  
+  MUL
+
+- **Stack operations**  
+  PUSH, POP (optimised for single register)
+
+- **Branch & Exchange**  
+  B, BL (condition codes supported), BX
+
+- **System / Hint instructions**  
+  NOP, BKPT, WFI, WFE, YIELD, SEV
+
+- **Condition codes & `S` flag**  
+  e.g. `addeq`, `movs`, `bleq`
+
+- **Directives**  
+  `.word`, `.float`, `.align`, `.ascii`, `.asciz`, `.global`, `.text`, `.data`
+
+- **Configurable endianness**  
+  `Endian::Little` (default) or `Endian::Big`
+
+- **Custom start address**  
+  Pass `start_address` in `AssemblerOptions`
+
+- **Symbol resolver trait**  
+  Built‑in resolvers: `NoSymbolResolver`, `HashMapSymbolResolver`, `FnSymbolResolver`  
+  Easy to implement your own via the `SymbolResolver` trait
+
+- **Parser features**  
+  `;` separates multiple statements on one line  
+  `@` starts a line comment  
+  Labels with `:`  
+  Robust error reporting with line/column numbers
+
+- **Pure Rust** – compiles to `wasm32-unknown-unknown` for WebAssembly
 
 ---
 
@@ -137,14 +167,14 @@ impl SymbolResolver for MyResolver {
 
 | Category             | Mnemonics                                                       |
 |----------------------|-----------------------------------------------------------------|
-| Data processing      | MOV, MVN, ADD, SUB, RSB, ADC, SBC, RSC, AND, ORR, EOR, BIC       |
-| Comparisons          | CMP, CMN, TST, TEQ                                               |
+| Data processing      | MOV, MVN, ADD, SUB, RSB, ADC, SBC, RSC, AND, ORR, EOR, BIC      |
+| Comparisons          | CMP, CMN, TST, TEQ                                              |
 | Load/Store           | LDR, STR, LDRB, STRB                                            |
 | Multiply             | MUL                                                             |
 | Stack                | PUSH, POP                                                       |
 | Branch               | B, BL, BX                                                       |
 | Supervisor           | SVC                                                             |
-| Misc                 | NOP                                                             |
+| System               | SVC, NOP, BKPT, WFI, WFE, YIELD, SEV                            |
 
 ### Operand forms
 
