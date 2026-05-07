@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "armv7-asm-encoder"
+name = "armv7-encoder"
 version = "0.1.0"
 dependencies = [
  "nom",
