@@ -345,8 +345,8 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
     let token_lower = token.to_lowercase();
 
     // Nightly un-nested logic
-    if let Some(rest) = token_lower.strip_prefix("it") {
-        if (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e')) && rest.len() <= 3 {
+    if let Some(rest) = token_lower.strip_prefix("it")
+        && (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e')) && rest.len() <= 3 {
             return Ok((
                 remaining,
                 MnemonicInfo {
@@ -356,7 +356,6 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
                 },
             ));
         }
-    }
 
     let bases = [
         ("ldrb", Mnemonic::Ldrb),

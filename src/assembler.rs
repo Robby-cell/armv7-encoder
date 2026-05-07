@@ -57,8 +57,8 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
     let mut pool_id = 0;
 
     for stmt in &mut statements {
-        if matches!(stmt.mnemonic, Mnemonic::Ldr) {
-            if let Some(op) = stmt.operands.get(1).cloned() {
+        if matches!(stmt.mnemonic, Mnemonic::Ldr)
+            && let Some(op) = stmt.operands.get(1).cloned() {
                 match op {
                     Operand::PseudoLoadLabel(lbl) => {
                         let pool_lbl = format!("__pool_{}", pool_id);
@@ -89,7 +89,6 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
                     _ => {}
                 }
             }
-        }
     }
 
     statements.extend(pool_entries);
@@ -119,7 +118,7 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
             Mnemonic::Align => {
                 if let Operand::Imm(val) = stmt.operands[0] {
                     let align_bytes = 1 << val;
-                    if current_addr % align_bytes == 0 {
+                    if current_addr.is_multiple_of(align_bytes) {
                         0
                     } else {
                         align_bytes - (current_addr % align_bytes)
@@ -174,7 +173,7 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
             Mnemonic::Align => {
                 if let Operand::Imm(val) = stmt.operands[0] {
                     let align_bytes = 1 << val;
-                    let pad = if current_addr % align_bytes == 0 {
+                    let pad = if current_addr.is_multiple_of(align_bytes) {
                         0
                     } else {
                         align_bytes - (current_addr % align_bytes)
