@@ -58,37 +58,38 @@ pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<
 
     for stmt in &mut statements {
         if matches!(stmt.mnemonic, Mnemonic::Ldr)
-            && let Some(op) = stmt.operands.get(1).cloned() {
-                match op {
-                    Operand::PseudoLoadLabel(lbl) => {
-                        let pool_lbl = format!("__pool_{}", pool_id);
-                        pool_id += 1;
-                        pool_entries.push(Statement {
-                            label: Some(pool_lbl.clone()),
-                            mnemonic: Mnemonic::Word,
-                            condition: Condition::AL,
-                            s_flag: false,
-                            operands: vec![Operand::Label(lbl)],
-                            line: stmt.line,
-                        });
-                        stmt.operands[1] = Operand::Label(pool_lbl);
-                    }
-                    Operand::PseudoLoadImm(val) => {
-                        let pool_lbl = format!("__pool_{}", pool_id);
-                        pool_id += 1;
-                        pool_entries.push(Statement {
-                            label: Some(pool_lbl.clone()),
-                            mnemonic: Mnemonic::Word,
-                            condition: Condition::AL,
-                            s_flag: false,
-                            operands: vec![Operand::Imm(val)],
-                            line: stmt.line,
-                        });
-                        stmt.operands[1] = Operand::Label(pool_lbl);
-                    }
-                    _ => {}
+            && let Some(op) = stmt.operands.get(1).cloned()
+        {
+            match op {
+                Operand::PseudoLoadLabel(lbl) => {
+                    let pool_lbl = format!("__pool_{}", pool_id);
+                    pool_id += 1;
+                    pool_entries.push(Statement {
+                        label: Some(pool_lbl.clone()),
+                        mnemonic: Mnemonic::Word,
+                        condition: Condition::AL,
+                        s_flag: false,
+                        operands: vec![Operand::Label(lbl)],
+                        line: stmt.line,
+                    });
+                    stmt.operands[1] = Operand::Label(pool_lbl);
                 }
+                Operand::PseudoLoadImm(val) => {
+                    let pool_lbl = format!("__pool_{}", pool_id);
+                    pool_id += 1;
+                    pool_entries.push(Statement {
+                        label: Some(pool_lbl.clone()),
+                        mnemonic: Mnemonic::Word,
+                        condition: Condition::AL,
+                        s_flag: false,
+                        operands: vec![Operand::Imm(val)],
+                        line: stmt.line,
+                    });
+                    stmt.operands[1] = Operand::Label(pool_lbl);
+                }
+                _ => {}
             }
+        }
     }
 
     statements.extend(pool_entries);

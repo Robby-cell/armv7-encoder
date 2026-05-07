@@ -346,16 +346,18 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
 
     // Nightly un-nested logic
     if let Some(rest) = token_lower.strip_prefix("it")
-        && (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e')) && rest.len() <= 3 {
-            return Ok((
-                remaining,
-                MnemonicInfo {
-                    op: Mnemonic::It,
-                    condition: Condition::AL,
-                    set_flags: false,
-                },
-            ));
-        }
+        && (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e'))
+        && rest.len() <= 3
+    {
+        return Ok((
+            remaining,
+            MnemonicInfo {
+                op: Mnemonic::It,
+                condition: Condition::AL,
+                set_flags: false,
+            },
+        ));
+    }
 
     let bases = [
         ("ldrb", Mnemonic::Ldrb),
