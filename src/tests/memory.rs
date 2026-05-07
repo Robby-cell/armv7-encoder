@@ -8,6 +8,18 @@ fn ldr_immediate_offset() {
 }
 
 #[test]
+fn extra_load_store() {
+    let code = "ldrh r0, [r1, #2]\nstrd r2, [r3, r4]";
+    let bytes = assemble(code).unwrap();
+
+    // ldrh r0, [r1, #2] -> 0xE1D100B2
+    assert_eq!(&bytes[0..4], &[0xb2, 0x00, 0xd1, 0xe1]);
+
+    // strd r2,[r3, r4] -> 0xE18320F4 (U=1, P=1, Register offset)
+    assert_eq!(&bytes[4..8], &[0xf4, 0x20, 0x83, 0xe1]);
+}
+
+#[test]
 fn str_immediate_offset() {
     let code = "str r0, [r1, #8]";
     let bytes = assemble(code).unwrap();
@@ -23,7 +35,7 @@ fn ldrb_register_offset() {
 
 #[test]
 fn strb_scaled_offset() {
-    let code = "strb r0, [r1, r2, lsl #2]";
+    let code = "strb r0,[r1, r2, lsl #2]";
     let bytes = assemble(code).unwrap();
     assert_eq!(bytes, vec![0x02, 0x01, 0xc1, 0xe7]);
 }

@@ -30,199 +30,210 @@ impl Default for AssemblerOptions {
     }
 }
 
-pub fn assemble(source: &str) -> Result<Vec<u8>, AsmError> {
-    assemble_with_options(source, AssemblerOptions::default())
+pub struct Encoder {
+    pub options: AssemblerOptions,
 }
 
-pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<Vec<u8>, AsmError> {
-    let mut statements = Vec::new();
-    for (line_idx, raw_line) in source.lines().enumerate() {
-        let line_num = line_idx + 1;
-        let trimmed = process_line(raw_line);
-        if trimmed.is_empty() {
-            continue;
-        }
-        for part in trimmed.split(';') {
-            let part = part.trim();
-            if part.is_empty() {
-                continue;
-            }
-            let mut stmt = parse_statement(part, line_num)?;
-            stmt.line = line_num;
-            statements.push(stmt);
-        }
+impl Encoder {
+    pub fn new(options: AssemblerOptions) -> Self {
+        Self { options }
     }
 
-    // Pseudo-instruction expansion (LDR Rd, =expr)
-    let mut pool_entries = Vec::new();
-    let mut pool_id = 0;
-
-    for stmt in &mut statements {
-        if matches!(stmt.mnemonic, Mnemonic::Ldr)
-            && let Some(op) = stmt.operands.get(1).cloned()
-        {
-            match op {
-                Operand::PseudoLoadLabel(lbl) => {
-                    let pool_lbl = format!("__pool_{}", pool_id);
-                    pool_id += 1;
-                    pool_entries.push(Statement {
-                        label: Some(pool_lbl.clone()),
-                        mnemonic: Mnemonic::Word,
-                        condition: Condition::Al,
-                        s_flag: false,
-                        operands: vec![Operand::Label(lbl)],
-                        line: stmt.line,
-                    });
-                    stmt.operands[1] = Operand::Label(pool_lbl);
+    pub fn assemble(&self, source: &str) -> Result<Vec<u8>, AsmError> {
+        let mut statements = Vec::new();
+        for (line_idx, raw_line) in source.lines().enumerate() {
+            let line_num = line_idx + 1;
+            let trimmed = process_line(raw_line);
+            if trimmed.is_empty() {
+                continue;
+            }
+            for part in trimmed.split(';') {
+                let part = part.trim();
+                if part.is_empty() {
+                    continue;
                 }
-                Operand::PseudoLoadImm(val) => {
-                    let pool_lbl = format!("__pool_{}", pool_id);
-                    pool_id += 1;
-                    pool_entries.push(Statement {
-                        label: Some(pool_lbl.clone()),
-                        mnemonic: Mnemonic::Word,
-                        condition: Condition::Al,
-                        s_flag: false,
-                        operands: vec![Operand::Imm(val)],
+                let mut stmt = parse_statement(part, line_num)?;
+                stmt.line = line_num;
+                statements.push(stmt);
+            }
+        }
+
+        let mut pool_entries = Vec::new();
+        let mut pool_id = 0;
+
+        for stmt in &mut statements {
+            if matches!(stmt.mnemonic, Mnemonic::Ldr)
+                && let Some(op) = stmt.operands.get(1).cloned()
+            {
+                match op {
+                    Operand::PseudoLoadLabel(lbl) => {
+                        let pool_lbl = format!("__pool_{}", pool_id);
+                        pool_id += 1;
+                        pool_entries.push(Statement {
+                            label: Some(pool_lbl.clone()),
+                            mnemonic: Mnemonic::Word,
+                            condition: Condition::Al,
+                            s_flag: false,
+                            operands: vec![Operand::Label(lbl)],
+                            line: stmt.line,
+                        });
+                        stmt.operands[1] = Operand::Label(pool_lbl);
+                    }
+                    Operand::PseudoLoadImm(val) => {
+                        let pool_lbl = format!("__pool_{}", pool_id);
+                        pool_id += 1;
+                        pool_entries.push(Statement {
+                            label: Some(pool_lbl.clone()),
+                            mnemonic: Mnemonic::Word,
+                            condition: Condition::Al,
+                            s_flag: false,
+                            operands: vec![Operand::Imm(val)],
+                            line: stmt.line,
+                        });
+                        stmt.operands[1] = Operand::Label(pool_lbl);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        statements.extend(pool_entries);
+
+        let mut current_addr = self.options.start_address;
+        let mut label_map: HashMap<String, u32> = HashMap::new();
+
+        for stmt in &mut statements {
+            if let Some(ref label) = stmt.label {
+                if label_map.contains_key(label) {
+                    return Err(AsmError::ParseError {
                         line: stmt.line,
+                        col: 0,
+                        message: format!("duplicate label '{}'", label),
                     });
-                    stmt.operands[1] = Operand::Label(pool_lbl);
+                }
+                label_map.insert(label.clone(), current_addr);
+            }
+            let size = match stmt.mnemonic {
+                Mnemonic::LabelOnly
+                | Mnemonic::Global
+                | Mnemonic::Text
+                | Mnemonic::Data
+                | Mnemonic::It => 0,
+                Mnemonic::Float => 4,
+                Mnemonic::Align => {
+                    if let Operand::Imm(val) = stmt.operands[0] {
+                        let align_bytes = 1 << val;
+                        if current_addr.is_multiple_of(align_bytes) {
+                            0
+                        } else {
+                            align_bytes - (current_addr % align_bytes)
+                        }
+                    } else {
+                        0
+                    }
+                }
+                Mnemonic::Ascii => {
+                    if let Operand::StringBytes(ref b) = stmt.operands[0] {
+                        b.len() as u32
+                    } else {
+                        0
+                    }
+                }
+                Mnemonic::Asciz => {
+                    if let Operand::StringBytes(ref b) = stmt.operands[0] {
+                        (b.len() + 1) as u32
+                    } else {
+                        0
+                    }
+                }
+                _ => 4,
+            };
+            current_addr += size;
+        }
+
+        let mut bytes = Vec::new();
+        current_addr = self.options.start_address;
+
+        for stmt in &statements {
+            match &stmt.mnemonic {
+                Mnemonic::LabelOnly
+                | Mnemonic::Global
+                | Mnemonic::Text
+                | Mnemonic::Data
+                | Mnemonic::It => {
+                    continue;
+                }
+                Mnemonic::Float => {
+                    if let Operand::Float(val) = stmt.operands[0] {
+                        let word = val.to_bits();
+                        match self.options.endian {
+                            Endian::Big => bytes.extend_from_slice(&word.to_be_bytes()),
+                            Endian::Little => bytes.extend_from_slice(&word.to_le_bytes()),
+                        }
+                        current_addr += 4;
+                    }
+                    continue;
+                }
+                Mnemonic::Align => {
+                    if let Operand::Imm(val) = stmt.operands[0] {
+                        let align_bytes = 1 << val;
+                        let pad = if current_addr.is_multiple_of(align_bytes) {
+                            0
+                        } else {
+                            align_bytes - (current_addr % align_bytes)
+                        };
+                        bytes.resize(bytes.len() + pad as usize, 0);
+                        current_addr += pad;
+                    }
+                    continue;
+                }
+                Mnemonic::Ascii => {
+                    if let Operand::StringBytes(ref b) = stmt.operands[0] {
+                        bytes.extend_from_slice(b);
+                        current_addr += b.len() as u32;
+                    }
+                    continue;
+                }
+                Mnemonic::Asciz => {
+                    if let Operand::StringBytes(ref b) = stmt.operands[0] {
+                        bytes.extend_from_slice(b);
+                        bytes.push(0);
+                        current_addr += (b.len() + 1) as u32;
+                    }
+                    continue;
                 }
                 _ => {}
             }
-        }
-    }
 
-    statements.extend(pool_entries);
-
-    // Pass 1: address calculation and symbol collection
-    let mut current_addr = options.start_address;
-    let mut label_map: HashMap<String, u32> = HashMap::new();
-
-    for stmt in &mut statements {
-        if let Some(ref label) = stmt.label {
-            if label_map.contains_key(label) {
-                return Err(AsmError::ParseError {
-                    line: stmt.line,
-                    col: 0,
-                    message: format!("duplicate label '{}'", label),
-                });
-            }
-            label_map.insert(label.clone(), current_addr);
-        }
-        let size = match stmt.mnemonic {
-            Mnemonic::LabelOnly
-            | Mnemonic::Global
-            | Mnemonic::Text
-            | Mnemonic::Data
-            | Mnemonic::It => 0,
-            Mnemonic::Float => 4,
-            Mnemonic::Align => {
-                if let Operand::Imm(val) = stmt.operands[0] {
-                    let align_bytes = 1 << val;
-                    if current_addr.is_multiple_of(align_bytes) {
-                        0
-                    } else {
-                        align_bytes - (current_addr % align_bytes)
+            let instr = translate_statement(stmt, &label_map, &self.options, current_addr)?;
+            let word = encode_instruction(&instr).map_err(|e| {
+                if let AsmError::ImmediateOutOfRange { .. } = e {
+                    AsmError::ImmediateOutOfRange {
+                        line: stmt.line,
+                        value: 0,
                     }
                 } else {
-                    0
+                    e
                 }
-            }
-            Mnemonic::Ascii => {
-                if let Operand::StringBytes(ref b) = stmt.operands[0] {
-                    b.len() as u32
-                } else {
-                    0
-                }
-            }
-            Mnemonic::Asciz => {
-                if let Operand::StringBytes(ref b) = stmt.operands[0] {
-                    (b.len() + 1) as u32
-                } else {
-                    0
-                }
-            }
-            _ => 4,
-        };
-        current_addr += size;
-    }
+            })?;
 
-    // Pass 2: instruction encoding and output generation
-    let mut bytes = Vec::new();
-    current_addr = options.start_address;
-
-    for stmt in &statements {
-        match &stmt.mnemonic {
-            Mnemonic::LabelOnly
-            | Mnemonic::Global
-            | Mnemonic::Text
-            | Mnemonic::Data
-            | Mnemonic::It => {
-                continue;
+            match self.options.endian {
+                Endian::Big => bytes.extend_from_slice(&word.to_be_bytes()),
+                Endian::Little => bytes.extend_from_slice(&word.to_le_bytes()),
             }
-            Mnemonic::Float => {
-                if let Operand::Float(val) = stmt.operands[0] {
-                    let word = val.to_bits();
-                    match options.endian {
-                        Endian::Big => bytes.extend_from_slice(&word.to_be_bytes()),
-                        Endian::Little => bytes.extend_from_slice(&word.to_le_bytes()),
-                    }
-                    current_addr += 4;
-                }
-                continue;
-            }
-            Mnemonic::Align => {
-                if let Operand::Imm(val) = stmt.operands[0] {
-                    let align_bytes = 1 << val;
-                    let pad = if current_addr.is_multiple_of(align_bytes) {
-                        0
-                    } else {
-                        align_bytes - (current_addr % align_bytes)
-                    };
-                    bytes.resize(bytes.len() + pad as usize, 0);
-                    current_addr += pad;
-                }
-                continue;
-            }
-            Mnemonic::Ascii => {
-                if let Operand::StringBytes(ref b) = stmt.operands[0] {
-                    bytes.extend_from_slice(b);
-                    current_addr += b.len() as u32;
-                }
-                continue;
-            }
-            Mnemonic::Asciz => {
-                if let Operand::StringBytes(ref b) = stmt.operands[0] {
-                    bytes.extend_from_slice(b);
-                    bytes.push(0);
-                    current_addr += (b.len() + 1) as u32;
-                }
-                continue;
-            }
-            _ => {}
+            current_addr += 4;
         }
 
-        let instr = translate_statement(stmt, &label_map, &options, current_addr)?;
-        let word = encode_instruction(&instr).map_err(|e| {
-            if let AsmError::ImmediateOutOfRange { .. } = e {
-                AsmError::ImmediateOutOfRange {
-                    line: stmt.line,
-                    value: 0,
-                }
-            } else {
-                e
-            }
-        })?;
-
-        match options.endian {
-            Endian::Big => bytes.extend_from_slice(&word.to_be_bytes()),
-            Endian::Little => bytes.extend_from_slice(&word.to_le_bytes()),
-        }
-        current_addr += 4;
+        Ok(bytes)
     }
+}
 
-    Ok(bytes)
+pub fn assemble(source: &str) -> Result<Vec<u8>, AsmError> {
+    Encoder::new(AssemblerOptions::default()).assemble(source)
+}
+
+pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<Vec<u8>, AsmError> {
+    Encoder::new(options).assemble(source)
 }
 
 fn process_line(line: &str) -> String {
@@ -294,14 +305,15 @@ fn translate_statement(
                 }),
                 [Operand::Reg(rd), Operand::Label(label)] => {
                     let target = resolve_label(label, labels, options, stmt.line)?;
-                    let pc = addr + 8;
-                    let offset = target as i32 - pc as i32;
                     Ok(Instruction::LoadStore {
                         cond,
                         load,
                         byte: false,
                         rd: *rd,
-                        addressing: AddressingMode::OffsetImmediate(Register::Pc, offset),
+                        addressing: AddressingMode::OffsetImmediate(
+                            Register::Pc,
+                            target as i32 - (addr as i32 + 8),
+                        ),
                     })
                 }
                 _ => Err(AsmError::ParseError {
@@ -323,23 +335,37 @@ fn translate_statement(
                 }),
                 [Operand::Reg(rd), Operand::Label(label)] => {
                     let target = resolve_label(label, labels, options, stmt.line)?;
-                    let pc = addr + 8;
-                    let offset = target as i32 - pc as i32;
                     Ok(Instruction::LoadStore {
                         cond,
                         load,
                         byte: true,
                         rd: *rd,
-                        addressing: AddressingMode::OffsetImmediate(Register::Pc, offset),
+                        addressing: AddressingMode::OffsetImmediate(
+                            Register::Pc,
+                            target as i32 - (addr as i32 + 8),
+                        ),
                     })
                 }
                 _ => Err(AsmError::ParseError {
                     line: stmt.line,
                     col: 0,
-                    message: "LDRB/STRB require Rd, [memory] or Rd, label".into(),
+                    message: "LDRB/STRB require Rd,[memory] or Rd, label".into(),
                 }),
             }
         }
+        Mnemonic::LoadStoreExtra(op) => match &stmt.operands[..] {
+            [Operand::Reg(rd), Operand::Memory(addr_mode)] => Ok(Instruction::LoadStoreExtra {
+                cond,
+                op: *op,
+                rd: *rd,
+                addressing: addr_mode.clone(),
+            }),
+            _ => Err(AsmError::ParseError {
+                line: stmt.line,
+                col: 0,
+                message: "Extra Load/Store requires Rd,[memory]".into(),
+            }),
+        },
         Mnemonic::Push => {
             if let [Operand::RegList(regs)] = &stmt.operands[..] {
                 Ok(Instruction::Push {
@@ -382,6 +408,87 @@ fn translate_statement(
                     line: stmt.line,
                     col: 0,
                     message: "MUL requires Rd, Rn, Rm".into(),
+                })
+            }
+        }
+        Mnemonic::Mla => {
+            if let [
+                Operand::Reg(rd),
+                Operand::Reg(rn),
+                Operand::Reg(rm),
+                Operand::Reg(ra),
+            ] = &stmt.operands[..]
+            {
+                Ok(Instruction::MultiplyAccumulate {
+                    cond,
+                    s: stmt.s_flag,
+                    rd: *rd,
+                    rn: *rn,
+                    rm: *rm,
+                    ra: *ra,
+                })
+            } else {
+                Err(AsmError::ParseError {
+                    line: stmt.line,
+                    col: 0,
+                    message: "MLA requires Rd, Rn, Rm, Ra".into(),
+                })
+            }
+        }
+        Mnemonic::Mls => {
+            if let [
+                Operand::Reg(rd),
+                Operand::Reg(rn),
+                Operand::Reg(rm),
+                Operand::Reg(ra),
+            ] = &stmt.operands[..]
+            {
+                Ok(Instruction::MultiplySubtract {
+                    cond,
+                    rd: *rd,
+                    rn: *rn,
+                    rm: *rm,
+                    ra: *ra,
+                })
+            } else {
+                Err(AsmError::ParseError {
+                    line: stmt.line,
+                    col: 0,
+                    message: "MLS requires Rd, Rn, Rm, Ra".into(),
+                })
+            }
+        }
+        Mnemonic::Sdiv => {
+            if let [Operand::Reg(rd), Operand::Reg(rn), Operand::Reg(rm)] = &stmt.operands[..] {
+                Ok(Instruction::Divide {
+                    cond,
+                    unsigned: false,
+                    rd: *rd,
+                    rn: *rn,
+                    rm: *rm,
+                })
+            } else {
+                Err(AsmError::ParseError {
+                    line: stmt.line,
+                    col: 0,
+                    message: "SDIV requires Rd, Rn, Rm".into(),
+                })
+            }
+        }
+        Mnemonic::Udiv => {
+            if let [Operand::Reg(rd), Operand::Reg(rn), Operand::Reg(rm)] = &stmt.operands[..] {
+                Ok(Instruction::Divide {
+                    cond,
+                    unsigned: true,
+                    rd: *rd,
+                    rn: *rn,
+                    rm: *rm,
+                })
+            } else {
+                Err(AsmError::ParseError {
+                    line: stmt.line,
+                    col: 0,
+                    message: "UDIV requires Rd, Rn, Rm".into(),
                 })
             }
         }
@@ -440,7 +547,7 @@ fn translate_statement(
                 Err(AsmError::ParseError {
                     line: stmt.line,
                     col: 0,
-                    message: "BKPT requires an immediate value".into(),
+                    message: "BKPT requires immediate".into(),
                 })
             }
         }

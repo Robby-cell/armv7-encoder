@@ -86,21 +86,21 @@ impl Condition {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ShiftType {
-    LSL,
-    LSR,
-    ASR,
-    ROR,
-    RRX,
+    Lsl,
+    Lsr,
+    Asr,
+    Ror,
+    Rrx,
 }
 
 impl ShiftType {
     pub fn code(self) -> u32 {
         match self {
-            ShiftType::LSL => 0b00,
-            ShiftType::LSR => 0b01,
-            ShiftType::ASR => 0b10,
-            ShiftType::ROR => 0b11,
-            ShiftType::RRX => 0b11,
+            ShiftType::Lsl => 0b00,
+            ShiftType::Lsr => 0b01,
+            ShiftType::Asr => 0b10,
+            ShiftType::Ror => 0b11,
+            ShiftType::Rrx => 0b11,
         }
     }
 }
@@ -111,7 +111,7 @@ pub enum ShifterOperand {
     Register(Register),
     ImmediateShift(Register, ShiftType, u32),
     RegisterShift(Register, ShiftType, Register),
-    RRX(Register),
+    Rrx(Register),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -157,6 +157,30 @@ impl DataOpcode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ExtraLoadStoreOp {
+    Strh,
+    Ldrh,
+    Ldrsb,
+    Ldrsh,
+    Strd,
+    Ldrd,
+}
+
+impl ExtraLoadStoreOp {
+    fn l_s_h(self) -> (u32, u32, u32) {
+        match self {
+            Self::Strh => (0, 0, 1),
+            Self::Ldrh => (1, 0, 1),
+            // Corrected: LDRD has bits '1101' (D), STRD has bits '1111' (F)
+            Self::Ldrd => (0, 1, 0),
+            Self::Ldrsb => (1, 1, 0),
+            Self::Strd => (0, 1, 1),
+            Self::Ldrsh => (1, 1, 1),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Instruction {
     DataProcessing {
@@ -174,6 +198,12 @@ pub enum Instruction {
         rd: Register,
         addressing: AddressingMode,
     },
+    LoadStoreExtra {
+        cond: Condition,
+        op: ExtraLoadStoreOp,
+        rd: Register,
+        addressing: AddressingMode,
+    },
     Push {
         cond: Condition,
         reg_list: Vec<Register>,
@@ -185,6 +215,28 @@ pub enum Instruction {
     Multiply {
         cond: Condition,
         s: bool,
+        rd: Register,
+        rn: Register,
+        rm: Register,
+    },
+    MultiplyAccumulate {
+        cond: Condition,
+        s: bool,
+        rd: Register,
+        rn: Register,
+        rm: Register,
+        ra: Register,
+    },
+    MultiplySubtract {
+        cond: Condition,
+        rd: Register,
+        rn: Register,
+        rm: Register,
+        ra: Register,
+    },
+    Divide {
+        cond: Condition,
+        unsigned: bool,
         rd: Register,
         rn: Register,
         rm: Register,
@@ -314,6 +366,62 @@ pub fn encode_instruction(instr: &Instruction) -> Result<u32, AsmError> {
                 }
             }
         }
+        Instruction::LoadStoreExtra {
+            cond,
+            op,
+            rd,
+            addressing,
+        } => {
+            let cond_code = cond.code() << 28;
+            let rd_code = rd.code() << 12;
+            let (l, s, h) = op.l_s_h();
+            let l_bit = l << 20;
+            let op_bits = (s << 6) | (h << 5) | (1 << 7) | (1 << 4);
+
+            match addressing {
+                AddressingMode::OffsetImmediate(rn, offset) => {
+                    let rn_code = rn.code() << 16;
+                    if *offset < -255 || *offset > 255 {
+                        return Err(AsmError::ImmediateOutOfRange {
+                            line: 0,
+                            value: offset.unsigned_abs(),
+                        });
+                    }
+                    let u_bit = if *offset >= 0 { 1 << 23 } else { 0 };
+                    let abs_off = offset.unsigned_abs();
+                    let imm4h = (abs_off >> 4) & 0xF;
+                    let imm4l = abs_off & 0xF;
+
+                    Ok(cond_code
+                        | (1 << 24)
+                        | u_bit
+                        | (1 << 22)
+                        | l_bit
+                        | rn_code
+                        | rd_code
+                        | (imm4h << 8)
+                        | op_bits
+                        | imm4l)
+                }
+                AddressingMode::OffsetRegister(rn, rm) => {
+                    let rn_code = rn.code() << 16;
+                    let u_bit = 1 << 23;
+                    Ok(cond_code
+                        | (1 << 24)
+                        | u_bit
+                        | l_bit
+                        | rn_code
+                        | rd_code
+                        | op_bits
+                        | rm.code())
+                }
+                AddressingMode::OffsetScaled(..) => Err(AsmError::ParseError {
+                    line: 0,
+                    col: 0,
+                    message: "Scaled offset not supported for extra load/store".into(),
+                }),
+            }
+        }
         Instruction::Push { cond, reg_list } => {
             let cond_code = cond.code() << 28;
             if reg_list.len() == 1 {
@@ -351,6 +459,50 @@ pub fn encode_instruction(instr: &Instruction) -> Result<u32, AsmError> {
             let s_bit = if *s { 1 << 20 } else { 0 };
             Ok(cond_code | s_bit | (rd.code() << 16) | (rm.code() << 8) | 0x90 | rn.code())
         }
+        Instruction::MultiplyAccumulate {
+            cond,
+            s,
+            rd,
+            rn,
+            rm,
+            ra,
+        } => {
+            let cond_code = cond.code() << 28;
+            let s_bit = if *s { 1 << 20 } else { 0 };
+            Ok(cond_code
+                | 0x00200090
+                | s_bit
+                | (rd.code() << 16)
+                | (ra.code() << 12)
+                | (rm.code() << 8)
+                | rn.code())
+        }
+        Instruction::MultiplySubtract {
+            cond,
+            rd,
+            rn,
+            rm,
+            ra,
+        } => {
+            let cond_code = cond.code() << 28;
+            Ok(cond_code
+                | 0x00600090
+                | (rd.code() << 16)
+                | (ra.code() << 12)
+                | (rm.code() << 8)
+                | rn.code())
+        }
+        Instruction::Divide {
+            cond,
+            unsigned,
+            rd,
+            rn,
+            rm,
+        } => {
+            let cond_code = cond.code() << 28;
+            let base = if *unsigned { 0x0730F010 } else { 0x0710F010 };
+            Ok(cond_code | base | (rd.code() << 16) | (rm.code() << 8) | rn.code())
+        }
         Instruction::Branch { cond, link, offset } => {
             let cond_code = cond.code() << 28;
             let l_bit = if *link { 1 << 24 } else { 0 };
@@ -373,7 +525,6 @@ pub fn encode_instruction(instr: &Instruction) -> Result<u32, AsmError> {
             let imm32 = *imm as u32;
             let imm12 = (imm32 >> 4) & 0xFFF;
             let imm4 = imm32 & 0xF;
-            // The ARM BKPT instruction is unconditionally executed, encoded implicitly via condition AL (1110)
             Ok(0xE1200070 | (imm12 << 8) | imm4)
         }
         Instruction::RawWord(val) => Ok(*val),
@@ -395,14 +546,14 @@ fn encode_shifter_operand(
         }
         ShifterOperand::Register(rm) => Ok((0, rm.code())),
         ShifterOperand::ImmediateShift(rm, shift, amount) => {
-            if *amount > 31 && *shift != ShiftType::RRX {
+            if *amount > 31 && *shift != ShiftType::Rrx {
                 return Err(AsmError::InvalidShift {
                     line: 0,
                     message: "shift amount 0-31".into(),
                 });
             }
             let shift_code = shift.code();
-            let shift_imm = if *shift == ShiftType::RRX {
+            let shift_imm = if *shift == ShiftType::Rrx {
                 0
             } else {
                 *amount & 0x1F
@@ -419,6 +570,6 @@ fn encode_shifter_operand(
             let shift_code = shift.code();
             Ok((0, (rs.code() << 8) | (shift_code << 5) | 0x10 | rm.code()))
         }
-        ShifterOperand::RRX(rm) => Ok((0, (0b11 << 5) | rm.code())),
+        ShifterOperand::Rrx(rm) => Ok((0, (0b11 << 5) | rm.code())),
     }
 }

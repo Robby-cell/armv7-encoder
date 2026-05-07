@@ -1,4 +1,6 @@
-use crate::encoder::{AddressingMode, Condition, DataOpcode, Register, ShiftType, ShifterOperand};
+use crate::encoder::{
+    AddressingMode, Condition, DataOpcode, ExtraLoadStoreOp, Register, ShiftType, ShifterOperand,
+};
 use crate::error::AsmError;
 use nom::{
     IResult, Parser,
@@ -175,11 +177,11 @@ fn condition_parser(input: &str) -> IResult<&str, Condition> {
 
 fn shift_type(input: &str) -> IResult<&str, ShiftType> {
     alt((
-        value(ShiftType::LSL, tag_no_case("lsl")),
-        value(ShiftType::LSR, tag_no_case("lsr")),
-        value(ShiftType::ASR, tag_no_case("asr")),
-        value(ShiftType::ROR, tag_no_case("ror")),
-        value(ShiftType::RRX, tag_no_case("rrx")),
+        value(ShiftType::Lsl, tag_no_case("lsl")),
+        value(ShiftType::Lsr, tag_no_case("lsr")),
+        value(ShiftType::Asr, tag_no_case("asr")),
+        value(ShiftType::Ror, tag_no_case("ror")),
+        value(ShiftType::Rrx, tag_no_case("rrx")),
     ))
     .parse(input)
 }
@@ -207,7 +209,7 @@ fn shifter_operand(input: &str) -> IResult<&str, ShifterOperand> {
     let (input, shift) = opt(preceded(
         (char(','), sp),
         alt((
-            map(tag_no_case("rrx"), |_| (ShiftType::RRX, None)),
+            map(tag_no_case("rrx"), |_| (ShiftType::Rrx, None)),
             map((shift_type, sp, shift_amount), |(st, _, amt)| {
                 (st, Some(amt))
             }),
@@ -217,7 +219,7 @@ fn shifter_operand(input: &str) -> IResult<&str, ShifterOperand> {
 
     match shift {
         None => Ok((input, ShifterOperand::Register(rm))),
-        Some((ShiftType::RRX, _)) => Ok((input, ShifterOperand::RRX(rm))),
+        Some((ShiftType::Rrx, _)) => Ok((input, ShifterOperand::Rrx(rm))),
         Some((st, Some(ShiftAmount::Immediate(imm)))) => {
             if imm > 31 {
                 return Err(nom::Err::Error(nom::error::Error::new(
@@ -282,14 +284,24 @@ pub enum Mnemonic {
     Str,
     Ldrb,
     Strb,
+    LoadStoreExtra(ExtraLoadStoreOp),
     Push,
     Pop,
     Mul,
+    Mla,
+    Mls,
+    Sdiv,
+    Udiv,
     B,
     Bl,
     Bx,
     Svc,
     Nop,
+    Bkpt,
+    Wfi,
+    Wfe,
+    Yield,
+    Sev,
     Global,
     Text,
     Data,
@@ -300,11 +312,6 @@ pub enum Mnemonic {
     LabelOnly,
     It,
     Float,
-    Bkpt,
-    Wfi,
-    Wfe,
-    Yield,
-    Sev,
 }
 
 #[derive(Debug, Clone)]
@@ -344,7 +351,6 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
     let (remaining, token) = take_while1(|c: char| c.is_alphabetic()).parse(input)?;
     let token_lower = token.to_lowercase();
 
-    // Nightly un-nested logic
     if let Some(rest) = token_lower.strip_prefix("it")
         && (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e'))
         && rest.len() <= 3
@@ -362,9 +368,19 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
     let bases = [
         ("ldrb", Mnemonic::Ldrb),
         ("strb", Mnemonic::Strb),
+        ("ldrh", Mnemonic::LoadStoreExtra(ExtraLoadStoreOp::Ldrh)),
+        ("strh", Mnemonic::LoadStoreExtra(ExtraLoadStoreOp::Strh)),
+        ("ldrsb", Mnemonic::LoadStoreExtra(ExtraLoadStoreOp::Ldrsb)),
+        ("ldrsh", Mnemonic::LoadStoreExtra(ExtraLoadStoreOp::Ldrsh)),
+        ("ldrd", Mnemonic::LoadStoreExtra(ExtraLoadStoreOp::Ldrd)),
+        ("strd", Mnemonic::LoadStoreExtra(ExtraLoadStoreOp::Strd)),
         ("push", Mnemonic::Push),
         ("pop", Mnemonic::Pop),
         ("mul", Mnemonic::Mul),
+        ("mla", Mnemonic::Mla),
+        ("mls", Mnemonic::Mls),
+        ("sdiv", Mnemonic::Sdiv),
+        ("udiv", Mnemonic::Udiv),
         ("and", Mnemonic::DataProcessing(DataOpcode::And)),
         ("eor", Mnemonic::DataProcessing(DataOpcode::Eor)),
         ("sub", Mnemonic::DataProcessing(DataOpcode::Sub)),
@@ -499,7 +515,7 @@ fn parse_operands_for_mnemonic<'a>(
             .parse(input)?;
             Ok((input, vec![Operand::Reg(rd), op2]))
         }
-        Mnemonic::Str | Mnemonic::Ldrb | Mnemonic::Strb => {
+        Mnemonic::Str | Mnemonic::Ldrb | Mnemonic::Strb | Mnemonic::LoadStoreExtra(_) => {
             let (input, rd) = register(input)?;
             let (input, _) = (sp, char(','), sp).parse(input)?;
             let (input, op2) = alt((
@@ -513,7 +529,7 @@ fn parse_operands_for_mnemonic<'a>(
             let (input, regs) = register_list(input)?;
             Ok((input, vec![Operand::RegList(regs)]))
         }
-        Mnemonic::Mul => {
+        Mnemonic::Mul | Mnemonic::Sdiv | Mnemonic::Udiv => {
             let (input, rd) = register(input)?;
             let (input, _) = (sp, char(','), sp).parse(input)?;
             let (input, rn) = register(input)?;
@@ -524,6 +540,24 @@ fn parse_operands_for_mnemonic<'a>(
                 vec![Operand::Reg(rd), Operand::Reg(rn), Operand::Reg(rm)],
             ))
         }
+        Mnemonic::Mla | Mnemonic::Mls => {
+            let (input, rd) = register(input)?;
+            let (input, _) = (sp, char(','), sp).parse(input)?;
+            let (input, rn) = register(input)?;
+            let (input, _) = (sp, char(','), sp).parse(input)?;
+            let (input, rm) = register(input)?;
+            let (input, _) = (sp, char(','), sp).parse(input)?;
+            let (input, ra) = register(input)?;
+            Ok((
+                input,
+                vec![
+                    Operand::Reg(rd),
+                    Operand::Reg(rn),
+                    Operand::Reg(rm),
+                    Operand::Reg(ra),
+                ],
+            ))
+        }
         Mnemonic::B | Mnemonic::Bl => {
             let (input, label) = label_name(input)?;
             Ok((input, vec![Operand::Label(label)]))
@@ -532,11 +566,7 @@ fn parse_operands_for_mnemonic<'a>(
             let (input, rm) = register(input)?;
             Ok((input, vec![Operand::Reg(rm)]))
         }
-        Mnemonic::Svc => {
-            let (input, imm) = immediate(input)?;
-            Ok((input, vec![Operand::Imm(imm)]))
-        }
-        Mnemonic::Bkpt => {
+        Mnemonic::Svc | Mnemonic::Bkpt => {
             let (input, imm) = immediate(input)?;
             Ok((input, vec![Operand::Imm(imm)]))
         }
