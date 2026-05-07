@@ -67,7 +67,7 @@ Add the library to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-armv7-encoder = { git = "https://github.com/Robby-cell/armv7-encoder.git", tag = "0.1.0" }
+armv7-encoder = { git = "https://github.com/Robby-cell/armv7-encoder.git", tag = "0.2.0" }
 ```
 
 Then assemble some code:
