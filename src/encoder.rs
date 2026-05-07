@@ -172,7 +172,6 @@ impl ExtraLoadStoreOp {
         match self {
             Self::Strh => (0, 0, 1),
             Self::Ldrh => (1, 0, 1),
-            // Corrected: LDRD has bits '1101' (D), STRD has bits '1111' (F)
             Self::Ldrd => (0, 1, 0),
             Self::Ldrsb => (1, 1, 0),
             Self::Strd => (0, 1, 1),
