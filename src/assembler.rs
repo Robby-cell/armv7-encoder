@@ -565,6 +565,106 @@ fn translate_statement(
             };
             Ok(Instruction::RawWord(val))
         }
+        Mnemonic::Movw => match &stmt.operands[..] {
+            [Operand::Reg(rd), Operand::Imm(imm)] => {
+                if *imm > 0xFFFF {
+                    return Err(AsmError::ImmediateOutOfRange {
+                        line: stmt.line,
+                        value: *imm,
+                    });
+                }
+                Ok(Instruction::Movw {
+                    cond,
+                    rd: *rd,
+                    imm16: *imm as u16,
+                })
+            }
+            _ => Err(AsmError::ParseError {
+                line: stmt.line,
+                col: 0,
+                message: "MOVW expects Rd, #imm16".into(),
+            }),
+        },
+        Mnemonic::Movt => match &stmt.operands[..] {
+            [Operand::Reg(rd), Operand::Imm(imm)] => {
+                if *imm > 0xFFFF {
+                    return Err(AsmError::ImmediateOutOfRange {
+                        line: stmt.line,
+                        value: *imm,
+                    });
+                }
+                Ok(Instruction::Movt {
+                    cond,
+                    rd: *rd,
+                    imm16: *imm as u16,
+                })
+            }
+            _ => Err(AsmError::ParseError {
+                line: stmt.line,
+                col: 0,
+                message: "MOVT expects Rd, #imm16".into(),
+            }),
+        },
+        Mnemonic::Ldm | Mnemonic::Stm => {
+            let load = matches!(stmt.mnemonic, Mnemonic::Ldm);
+            match &stmt.operands[..] {
+                [Operand::Reg(rn), Operand::RegList(regs)] => Ok(Instruction::LdmStm {
+                    cond,
+                    load,
+                    rn: *rn,
+                    reg_list: regs.clone(),
+                    writeback: false,
+                }),
+                _ => Err(AsmError::ParseError {
+                    line: stmt.line,
+                    col: 0,
+                    message: "LDM/STM expect Rn, {reglist}".into(),
+                }),
+            }
+        }
+        Mnemonic::Sxtb => build_extend(cond, ExtendOp::Sxtb, stmt),
+        Mnemonic::Uxtb => build_extend(cond, ExtendOp::Uxtb, stmt),
+        Mnemonic::Sxth => build_extend(cond, ExtendOp::Sxth, stmt),
+        Mnemonic::Uxth => build_extend(cond, ExtendOp::Uxth, stmt),
+        Mnemonic::Rev => build_reverse(cond, ReverseOp::Rev, stmt),
+        Mnemonic::Rev16 => build_reverse(cond, ReverseOp::Rev16, stmt),
+        Mnemonic::Revsh => build_reverse(cond, ReverseOp::RevSH, stmt),
+    }
+}
+
+fn build_extend(cond: Condition, op: ExtendOp, stmt: &Statement) -> Result<Instruction, AsmError> {
+    match &stmt.operands[..] {
+        [Operand::Reg(rd), Operand::Reg(rm)] => Ok(Instruction::Extend {
+            cond,
+            op,
+            rd: *rd,
+            rm: *rm,
+        }),
+        _ => Err(AsmError::ParseError {
+            line: stmt.line,
+            col: 0,
+            message: "extend expects Rd, Rm".into(),
+        }),
+    }
+}
+
+fn build_reverse(
+    cond: Condition,
+    op: ReverseOp,
+    stmt: &Statement,
+) -> Result<Instruction, AsmError> {
+    match &stmt.operands[..] {
+        [Operand::Reg(rd), Operand::Reg(rm)] => Ok(Instruction::Reverse {
+            cond,
+            op,
+            rd: *rd,
+            rm: *rm,
+        }),
+        _ => Err(AsmError::ParseError {
+            line: stmt.line,
+            col: 0,
+            message: "reverse expects Rd, Rm".into(),
+        }),
     }
 }
 

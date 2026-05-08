@@ -312,6 +312,17 @@ pub enum Mnemonic {
     LabelOnly,
     It,
     Float,
+    Movw,
+    Movt,
+    Ldm,
+    Stm,
+    Sxtb,
+    Uxtb,
+    Sxth,
+    Uxth,
+    Rev,
+    Rev16,
+    Revsh,
 }
 
 #[derive(Debug, Clone)]
@@ -348,21 +359,20 @@ fn try_condition(s: &str) -> Option<Condition> {
 }
 
 fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
-    let (remaining, token) = take_while1(|c: char| c.is_alphabetic()).parse(input)?;
+    let (remaining, token) = take_while1(|c: char| c.is_alphanumeric()).parse(input)?;
     let token_lower = token.to_lowercase();
 
-    if let Some(rest) = token_lower.strip_prefix("it")
-        && (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e'))
-        && rest.len() <= 3
-    {
-        return Ok((
-            remaining,
-            MnemonicInfo {
-                op: Mnemonic::It,
-                condition: Condition::Al,
-                set_flags: false,
-            },
-        ));
+    if let Some(rest) = token_lower.strip_prefix("it") {
+        if (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e')) && rest.len() <= 3 {
+            return Ok((
+                remaining,
+                MnemonicInfo {
+                    op: Mnemonic::It,
+                    condition: Condition::Al,
+                    set_flags: false,
+                },
+            ));
+        }
     }
 
     let bases = [
@@ -410,6 +420,19 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
         ("wfe", Mnemonic::Wfe),
         ("yield", Mnemonic::Yield),
         ("sev", Mnemonic::Sev),
+        ("movw", Mnemonic::Movw),
+        ("movt", Mnemonic::Movt),
+        ("ldmia", Mnemonic::Ldm),
+        ("ldm", Mnemonic::Ldm),
+        ("stmia", Mnemonic::Stm),
+        ("stm", Mnemonic::Stm),
+        ("sxtb", Mnemonic::Sxtb),
+        ("uxtb", Mnemonic::Uxtb),
+        ("sxth", Mnemonic::Sxth),
+        ("uxth", Mnemonic::Uxth),
+        ("revsh", Mnemonic::Revsh),
+        ("rev16", Mnemonic::Rev16),
+        ("rev", Mnemonic::Rev),
     ];
 
     for (name, op) in bases.iter() {
@@ -572,6 +595,31 @@ fn parse_operands_for_mnemonic<'a>(
         }
         Mnemonic::Nop | Mnemonic::Wfi | Mnemonic::Wfe | Mnemonic::Yield | Mnemonic::Sev => {
             Ok((input, vec![]))
+        }
+        Mnemonic::Movw | Mnemonic::Movt => {
+            let (input, rd) = register(input)?;
+            let (input, _) = (sp, char(','), sp).parse(input)?;
+            let (input, imm) = immediate(input)?;
+            Ok((input, vec![Operand::Reg(rd), Operand::Imm(imm)]))
+        }
+        Mnemonic::Ldm | Mnemonic::Stm => {
+            let (input, rn) = register(input)?;
+            let (input, _) = (sp, char(','), sp).parse(input)?;
+            let (input, regs) = register_list(input)?;
+            Ok((input, vec![Operand::Reg(rn), Operand::RegList(regs)]))
+        }
+        Mnemonic::Sxtb
+        | Mnemonic::Uxtb
+        | Mnemonic::Sxth
+        | Mnemonic::Uxth
+        | Mnemonic::Rev
+        | Mnemonic::Rev16
+        | Mnemonic::Revsh => {
+            // Rd, Rm format
+            let (input, rd) = register(input)?;
+            let (input, _) = (sp, char(','), sp).parse(input)?;
+            let (input, rm) = register(input)?;
+            Ok((input, vec![Operand::Reg(rd), Operand::Reg(rm)]))
         }
         _ => unreachable!(),
     }

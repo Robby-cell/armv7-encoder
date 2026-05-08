@@ -261,6 +261,50 @@ pub enum Instruction {
         imm: u16,
     },
     RawWord(u32),
+    Movw {
+        cond: Condition,
+        rd: Register,
+        imm16: u16,
+    },
+    Movt {
+        cond: Condition,
+        rd: Register,
+        imm16: u16,
+    },
+    LdmStm {
+        cond: Condition,
+        load: bool, // true = LDM, false = STM
+        rn: Register,
+        reg_list: Vec<Register>,
+        writeback: bool, // we'll set false for now
+    },
+    Extend {
+        cond: Condition,
+        op: ExtendOp,
+        rd: Register,
+        rm: Register,
+    },
+    Reverse {
+        cond: Condition,
+        op: ReverseOp,
+        rd: Register,
+        rm: Register,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ExtendOp {
+    Sxtb,
+    Uxtb,
+    Sxth,
+    Uxth,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ReverseOp {
+    Rev,
+    Rev16,
+    RevSH,
 }
 
 #[derive(Debug, Clone)]
@@ -527,6 +571,54 @@ pub fn encode_instruction(instr: &Instruction) -> Result<u32, AsmError> {
             Ok(0xE1200070 | (imm12 << 8) | imm4)
         }
         Instruction::RawWord(val) => Ok(*val),
+        Instruction::Movw { cond, rd, imm16 } => {
+            let cond_code = cond.code() << 28;
+            let imm4 = (*imm16 >> 12) as u32 & 0xF;
+            let imm12 = *imm16 as u32 & 0xFFF;
+            Ok(cond_code | 0x0300_0000 | (imm4 << 16) | (rd.code() << 12) | imm12)
+        }
+        Instruction::Movt { cond, rd, imm16 } => {
+            let cond_code = cond.code() << 28;
+            let imm4 = (*imm16 >> 12) as u32 & 0xF;
+            let imm12 = *imm16 as u32 & 0xFFF;
+            Ok(cond_code | 0x0340_0000 | (imm4 << 16) | (rd.code() << 12) | imm12)
+        }
+        Instruction::LdmStm {
+            cond,
+            load,
+            rn,
+            reg_list,
+            writeback,
+        } => {
+            let cond_code = cond.code() << 28;
+            let base = if *load { 0x0890_0000 } else { 0x0880_0000 };
+            let w_bit = if *writeback { 1 << 21 } else { 0 };
+            let rn_code = rn.code() << 16;
+            let mut mask = 0u32;
+            for r in reg_list {
+                mask |= 1 << r.code();
+            }
+            Ok(cond_code | base | w_bit | rn_code | mask)
+        }
+        Instruction::Extend { cond, op, rd, rm } => {
+            let cond_code = cond.code() << 28;
+            let base = match op {
+                ExtendOp::Sxtb => 0x06AF0070,
+                ExtendOp::Uxtb => 0x06EF0070,
+                ExtendOp::Sxth => 0x06BF0070,
+                ExtendOp::Uxth => 0x06FF0070,
+            };
+            Ok(cond_code | base | (rd.code() << 12) | rm.code())
+        }
+        Instruction::Reverse { cond, op, rd, rm } => {
+            let cond_code = cond.code() << 28;
+            let base = match op {
+                ReverseOp::Rev => 0x06BF0F30,
+                ReverseOp::Rev16 => 0x06BF0FB0,
+                ReverseOp::RevSH => 0x06FF0FB0,
+            };
+            Ok(cond_code | base | (rd.code() << 12) | rm.code())
+        }
     }
 }
 

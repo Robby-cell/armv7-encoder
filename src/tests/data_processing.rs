@@ -242,3 +242,65 @@ fn shift_register() {
     let bytes = assemble(code).unwrap();
     assert_eq!(bytes, vec![0x12, 0x03, 0x81, 0xe0]);
 }
+
+#[test]
+fn movw_basic() {
+    let code = "movw r0, #0x1234";
+    let bytes = assemble(code).unwrap();
+    // MOVW r0, #0x1234 -> 0xE301_0? imm: 0x1234 = (imm4=1, imm12=0x234) => 0xE3010234
+    assert_eq!(bytes, vec![0x34, 0x02, 0x01, 0xe3]);
+}
+
+#[test]
+fn movt_basic() {
+    let code = "movt r1, #0x5678";
+    let bytes = assemble(code).unwrap();
+    // MOVT r1, #0x5678 -> imm4=5, imm12=0x678 => 0xE3451678?
+    assert_eq!(bytes, vec![0x78, 0x16, 0x45, 0xe3]);
+}
+
+#[test]
+fn ldm_stm() {
+    let code = "ldm r0, {r1, r2}";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0x06, 0x00, 0x90, 0xe8]);
+
+    let code = "stm r0, {r1, r2}";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0x06, 0x00, 0x80, 0xe8]);
+}
+
+#[test]
+fn extend_instructions() {
+    let code = "sxtb r0, r1";
+    let bytes = assemble(code).unwrap();
+    // SXTB r0,r1 -> 0xE6AF0071
+    assert_eq!(bytes, vec![0x71, 0x00, 0xaf, 0xe6]);
+
+    let code = "uxtb r2, r3";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0x73, 0x20, 0xef, 0xe6]);
+
+    let code = "sxth r4, r5";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0x75, 0x40, 0xbf, 0xe6]);
+
+    let code = "uxth r6, r7";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0x77, 0x60, 0xff, 0xe6]);
+}
+
+#[test]
+fn reverse_instructions() {
+    let code = "rev r0, r1";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0x31, 0x0f, 0xbf, 0xe6]);
+
+    let code = "rev16 r2, r3";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0xb3, 0x2f, 0xbf, 0xe6]);
+
+    let code = "revsh r4, r5";
+    let bytes = assemble(code).unwrap();
+    assert_eq!(bytes, vec![0xb5, 0x4f, 0xff, 0xe6]);
+}
