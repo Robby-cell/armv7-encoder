@@ -41,6 +41,28 @@ impl Register {
             Register::Pc => 15,
         }
     }
+
+    pub fn from_code(code: u32) -> Option<Self> {
+        match code {
+            0 => Some(Register::R0),
+            1 => Some(Register::R1),
+            2 => Some(Register::R2),
+            3 => Some(Register::R3),
+            4 => Some(Register::R4),
+            5 => Some(Register::R5),
+            6 => Some(Register::R6),
+            7 => Some(Register::R7),
+            8 => Some(Register::R8),
+            9 => Some(Register::R9),
+            10 => Some(Register::R10),
+            11 => Some(Register::R11),
+            12 => Some(Register::R12),
+            13 => Some(Register::Sp),
+            14 => Some(Register::Lr),
+            15 => Some(Register::Pc),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -276,7 +298,7 @@ pub enum Instruction {
         load: bool, // true = LDM, false = STM
         rn: Register,
         reg_list: Vec<Register>,
-        writeback: bool, // we'll set false for now
+        writeback: bool,
     },
     Extend {
         cond: Condition,

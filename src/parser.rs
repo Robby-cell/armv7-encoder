@@ -46,13 +46,39 @@ fn register(input: &str) -> IResult<&str, Register> {
     Ok((input, reg))
 }
 
+fn register_item(input: &str) -> IResult<&str, Vec<Register>> {
+    let (input, reg1) = register(input)?;
+    let (input, has_dash) = opt(preceded((sp, char('-'), sp), register)).parse(input)?;
+
+    if let Some(reg2) = has_dash {
+        let start = reg1.code();
+        let end = reg2.code();
+        if start > end {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Tag,
+            )));
+        }
+        let mut regs = Vec::new();
+        for c in start..=end {
+            // Unwrapping is safe because `Register::code()` values are guaranteed to be 0..=15
+            regs.push(Register::from_code(c).unwrap());
+        }
+        Ok((input, regs))
+    } else {
+        Ok((input, vec![reg1]))
+    }
+}
+
 fn register_list(input: &str) -> IResult<&str, Vec<Register>> {
     let (input, _) = char('{').parse(input)?;
     let (input, _) = sp(input)?;
-    let (input, regs) = separated_list1((sp, char(','), sp), register).parse(input)?;
+    let (input, items) = separated_list1((sp, char(','), sp), register_item).parse(input)?;
     let (input, _) = sp(input)?;
     let (input, _) = char('}').parse(input)?;
-    Ok((input, regs))
+
+    // Flatten multiple potentially ranged vectors into a single list
+    Ok((input, items.into_iter().flatten().collect()))
 }
 
 fn string_literal(input: &str) -> IResult<&str, String> {
@@ -280,6 +306,7 @@ fn memory(input: &str) -> IResult<&str, AddressingMode> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mnemonic {
     DataProcessing(DataOpcode),
+    Shift(ShiftType),
     Ldr,
     Str,
     Ldrb,
@@ -359,20 +386,22 @@ fn try_condition(s: &str) -> Option<Condition> {
 }
 
 fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
+    // FIX: Changed from `is_alphabetic` to `is_alphanumeric` to handle "rev16", "movw", etc. properly!
     let (remaining, token) = take_while1(|c: char| c.is_alphanumeric()).parse(input)?;
     let token_lower = token.to_lowercase();
 
-    if let Some(rest) = token_lower.strip_prefix("it") {
-        if (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e')) && rest.len() <= 3 {
-            return Ok((
-                remaining,
-                MnemonicInfo {
-                    op: Mnemonic::It,
-                    condition: Condition::Al,
-                    set_flags: false,
-                },
-            ));
-        }
+    if let Some(rest) = token_lower.strip_prefix("it")
+        && (rest.is_empty() || rest.chars().all(|c| c == 't' || c == 'e'))
+        && rest.len() <= 3
+    {
+        return Ok((
+            remaining,
+            MnemonicInfo {
+                op: Mnemonic::It,
+                condition: Condition::Al,
+                set_flags: false,
+            },
+        ));
     }
 
     let bases = [
@@ -433,6 +462,11 @@ fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
         ("revsh", Mnemonic::Revsh),
         ("rev16", Mnemonic::Rev16),
         ("rev", Mnemonic::Rev),
+        ("lsl", Mnemonic::Shift(ShiftType::Lsl)),
+        ("lsr", Mnemonic::Shift(ShiftType::Lsr)),
+        ("asr", Mnemonic::Shift(ShiftType::Asr)),
+        ("ror", Mnemonic::Shift(ShiftType::Ror)),
+        ("rrx", Mnemonic::Shift(ShiftType::Rrx)),
     ];
 
     for (name, op) in bases.iter() {
@@ -517,6 +551,33 @@ fn parse_operands_for_mnemonic<'a>(
 ) -> IResult<&'a str, Vec<Operand>> {
     match &info.op {
         Mnemonic::DataProcessing(op) => parse_data_proc_operands(input, *op),
+        Mnemonic::Shift(st) => {
+            let (input, rd) = register(input)?;
+            let (input, _) = (sp, char(','), sp).parse(input)?;
+
+            if *st == ShiftType::Rrx {
+                let (input, rm) = opt(preceded((sp, char(','), sp), register)).parse(input)?;
+                if let Some(rm) = rm {
+                    Ok((input, vec![Operand::Reg(rd), Operand::Reg(rm)]))
+                } else {
+                    Ok((input, vec![Operand::Reg(rd), Operand::Reg(rd)]))
+                }
+            } else {
+                let (input, op2) = alt((map(register, Operand::Reg), map(immediate, Operand::Imm)))
+                    .parse(input)?;
+                let (input, op3) = opt(preceded(
+                    (sp, char(','), sp),
+                    alt((map(register, Operand::Reg), map(immediate, Operand::Imm))),
+                ))
+                .parse(input)?;
+
+                if let Some(op3) = op3 {
+                    Ok((input, vec![Operand::Reg(rd), op2, op3]))
+                } else {
+                    Ok((input, vec![Operand::Reg(rd), Operand::Reg(rd), op2]))
+                }
+            }
+        }
         Mnemonic::It => {
             let (input, cond) = condition_parser(input)?;
             Ok((input, vec![Operand::Cond(cond)]))
@@ -762,7 +823,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     },
                 ));
             }
-            "word" => {
+            "word" | "long" => {
                 let (rest, op) = alt((
                     map(immediate, Operand::Imm),
                     map(label_name, Operand::Label),

@@ -293,6 +293,54 @@ fn translate_statement(
                 operand2: op2,
             })
         }
+        Mnemonic::Shift(st) => {
+            if *st == ShiftType::Rrx {
+                if let [Operand::Reg(rd), Operand::Reg(rm)] = &stmt.operands[..] {
+                    Ok(Instruction::DataProcessing {
+                        cond,
+                        s: stmt.s_flag,
+                        opcode: DataOpcode::Mov,
+                        rd: *rd,
+                        rn: None,
+                        operand2: ShifterOperand::Rrx(*rm),
+                    })
+                } else {
+                    Err(AsmError::ParseError {
+                        line: stmt.line,
+                        col: 0,
+                        message: "RRX expects Rd, Rm".into(),
+                    })
+                }
+            } else {
+                match &stmt.operands[..] {
+                    [Operand::Reg(rd), Operand::Reg(rm), Operand::Reg(rs)] => {
+                        Ok(Instruction::DataProcessing {
+                            cond,
+                            s: stmt.s_flag,
+                            opcode: DataOpcode::Mov,
+                            rd: *rd,
+                            rn: None,
+                            operand2: ShifterOperand::RegisterShift(*rm, *st, *rs),
+                        })
+                    }
+                    [Operand::Reg(rd), Operand::Reg(rm), Operand::Imm(imm)] => {
+                        Ok(Instruction::DataProcessing {
+                            cond,
+                            s: stmt.s_flag,
+                            opcode: DataOpcode::Mov,
+                            rd: *rd,
+                            rn: None,
+                            operand2: ShifterOperand::ImmediateShift(*rm, *st, *imm),
+                        })
+                    }
+                    _ => Err(AsmError::ParseError {
+                        line: stmt.line,
+                        col: 0,
+                        message: "Shift expects Rd, Rm, Rs or Rd, Rm, #imm".into(),
+                    }),
+                }
+            }
+        }
         Mnemonic::Ldr | Mnemonic::Str => {
             let load = matches!(stmt.mnemonic, Mnemonic::Ldr);
             match &stmt.operands[..] {

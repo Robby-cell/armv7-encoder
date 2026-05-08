@@ -1,6 +1,22 @@
 use crate::assembler::assemble;
 
 #[test]
+fn explicit_shifts() {
+    // lsl r0, r0, r2 -> mov r0, r0, lsl r2
+    // cond AL = 0xE. Mov base = 0x01A00000. Rd=0, Rm=0, Rs=2.
+    // i_bit=0, shift=0 (LSL), shift_reg=2 -> 0x0210 -> 0xE1A00210
+    let bytes = assemble("lsl r0, r0, r2").unwrap();
+    assert_eq!(bytes, vec![0x10, 0x02, 0xa0, 0xe1]);
+
+    // asrs r1, r2, #4 -> movs r1, r2, asr #4
+    // cond AL, s=1 -> 0xE1B00000 + (Rd=1) + (Rm=2) + (shift_imm=4 << 7) + asr (2<<5)
+    // 4<<7 (0x200) | 2<<5 (0x40) | Rm=2 -> 0x242
+    // -> 0xE1B01242
+    let bytes = assemble("asrs r1, r2, #4").unwrap();
+    assert_eq!(bytes, vec![0x42, 0x12, 0xb0, 0xe1]);
+}
+
+#[test]
 fn mov_immediate() {
     let code = "mov r0, #0x56";
     let bytes = assemble(code).unwrap();
