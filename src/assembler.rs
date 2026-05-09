@@ -119,6 +119,7 @@ impl Encoder {
                 | Mnemonic::Text
                 | Mnemonic::Data
                 | Mnemonic::It => 0,
+                Mnemonic::Byte => 1,
                 Mnemonic::Float => 4,
                 Mnemonic::Align => {
                     if let Operand::Imm(val) = stmt.operands[0] {
@@ -161,6 +162,13 @@ impl Encoder {
                 | Mnemonic::Text
                 | Mnemonic::Data
                 | Mnemonic::It => {
+                    continue;
+                }
+                Mnemonic::Byte => {
+                    if let Operand::Imm(val) = stmt.operands[0] {
+                        bytes.push(val as u8);
+                        current_addr += 1;
+                    }
                     continue;
                 }
                 Mnemonic::Float => {
@@ -260,6 +268,7 @@ fn translate_statement(
         | Mnemonic::Ascii
         | Mnemonic::Asciz
         | Mnemonic::It
+        | Mnemonic::Byte
         | Mnemonic::Float => unreachable!(),
 
         Mnemonic::DataProcessing(opcode) => {

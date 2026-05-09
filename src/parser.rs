@@ -336,6 +336,7 @@ pub enum Mnemonic {
     Ascii,
     Asciz,
     Word,
+    Byte,
     LabelOnly,
     It,
     Float,
@@ -848,6 +849,20 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                         condition: Condition::Al,
                         s_flag: false,
                         operands: vec![op],
+                        line: 0,
+                    },
+                ));
+            }
+            "byte" => {
+                let (rest, val) = immediate(rest)?;
+                return Ok((
+                    rest,
+                    Statement {
+                        label,
+                        mnemonic: Mnemonic::Byte,
+                        condition: Condition::Al,
+                        s_flag: false,
+                        operands: vec![Operand::Imm(val)],
                         line: 0,
                     },
                 ));
