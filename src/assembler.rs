@@ -663,10 +663,17 @@ fn translate_statement(
                     reg_list: regs.clone(),
                     writeback: false,
                 }),
+                [Operand::RegWriteback(rn), Operand::RegList(regs)] => Ok(Instruction::LdmStm {
+                    cond,
+                    load,
+                    rn: *rn,
+                    reg_list: regs.clone(),
+                    writeback: true,
+                }),
                 _ => Err(AsmError::ParseError {
                     line: stmt.line,
                     col: 0,
-                    message: "LDM/STM expect Rn, {reglist}".into(),
+                    message: "LDM/STM expect Rn or Rn!, {reglist}".into(),
                 }),
             }
         }

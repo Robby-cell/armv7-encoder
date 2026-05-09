@@ -355,6 +355,10 @@ pub enum Mnemonic {
 #[derive(Debug, Clone)]
 pub enum Operand {
     Reg(Register),
+
+    // TODO: Unused field
+    #[allow(unused)]
+    RegWriteback(Register),
     Imm(u32),
     Shifter(ShifterOperand),
     Label(String),
@@ -386,7 +390,6 @@ fn try_condition(s: &str) -> Option<Condition> {
 }
 
 fn parse_mnemonic_with_modifiers(input: &str) -> IResult<&str, MnemonicInfo> {
-    // FIX: Changed from `is_alphabetic` to `is_alphanumeric` to handle "rev16", "movw", etc. properly!
     let (remaining, token) = take_while1(|c: char| c.is_alphanumeric()).parse(input)?;
     let token_lower = token.to_lowercase();
 
@@ -665,9 +668,17 @@ fn parse_operands_for_mnemonic<'a>(
         }
         Mnemonic::Ldm | Mnemonic::Stm => {
             let (input, rn) = register(input)?;
+            let (input, wb) = opt(char('!')).parse(input)?; // Explicitly capture the optional writeback flag
             let (input, _) = (sp, char(','), sp).parse(input)?;
             let (input, regs) = register_list(input)?;
-            Ok((input, vec![Operand::Reg(rn), Operand::RegList(regs)]))
+
+            let rn_operand = if wb.is_some() {
+                Operand::RegWriteback(rn)
+            } else {
+                Operand::Reg(rn)
+            };
+
+            Ok((input, vec![rn_operand, Operand::RegList(regs)]))
         }
         Mnemonic::Sxtb
         | Mnemonic::Uxtb

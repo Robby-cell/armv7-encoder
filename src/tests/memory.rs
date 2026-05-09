@@ -29,6 +29,14 @@ fn ldm_stm() {
 }
 
 #[test]
+fn ldm_stm_writeback() {
+    let code = "stmia r0!, {r1-r8}";
+    let bytes = assemble(code).unwrap();
+    // cond AL=0xE. base=0x08800000. W=1 (0x00200000). Rn=0. mask=r1-r8=0x01FE. -> 0xE8A001FE
+    assert_eq!(bytes, vec![0xfe, 0x01, 0xa0, 0xe8]);
+}
+
+#[test]
 fn ldr_immediate_offset() {
     let code = "ldr r0, [r1, #4]";
     let bytes = assemble(code).unwrap();
