@@ -180,6 +180,57 @@ fn label_name(input: &str) -> IResult<&str, String> {
     .parse(input)
 }
 
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Number(i32),
+    Symbol(String),
+    CurrentAddress,
+    Add(Box<Expr>, Box<Expr>),
+    Sub(Box<Expr>, Box<Expr>),
+}
+
+fn parse_primary(input: &str) -> IResult<&str, Expr> {
+    let (input, _) = sp(input)?;
+    if let Ok((input, _)) = char::<&str, nom::error::Error<&str>>('(').parse(input) {
+        let (input, e) = parse_expr(input)?;
+        let (input, _) = sp(input)?;
+        let (input, _) = char(')').parse(input)?;
+        return Ok((input, e));
+    }
+    if let Ok((rest, val)) = immediate(input) {
+        return Ok((rest, Expr::Number(val as i32)));
+    }
+    if let Ok((rest, sym)) = label_name(input) {
+        if sym == "." {
+            return Ok((rest, Expr::CurrentAddress));
+        }
+        return Ok((rest, Expr::Symbol(sym)));
+    }
+    Err(nom::Err::Error(nom::error::Error::new(
+        input,
+        nom::error::ErrorKind::Tag,
+    )))
+}
+
+pub fn parse_expr(input: &str) -> IResult<&str, Expr> {
+    let (mut input, mut left) = parse_primary(input)?;
+    loop {
+        let (rest, _) = sp(input)?;
+        if let Ok((rest, _)) = char::<&str, nom::error::Error<&str>>('+').parse(rest) {
+            let (rest, right) = parse_primary(rest)?;
+            left = Expr::Add(Box::new(left), Box::new(right));
+            input = rest;
+        } else if let Ok((rest, _)) = char::<&str, nom::error::Error<&str>>('-').parse(rest) {
+            let (rest, right) = parse_primary(rest)?;
+            left = Expr::Sub(Box::new(left), Box::new(right));
+            input = rest;
+        } else {
+            break;
+        }
+    }
+    Ok((input, left))
+}
+
 fn condition_parser(input: &str) -> IResult<&str, Condition> {
     alt((
         value(Condition::Eq, tag_no_case("eq")),
@@ -367,8 +418,10 @@ pub enum Operand {
     Label(String),
     Memory(AddressingMode),
     RegList(Vec<Register>),
-    PseudoLoadLabel(String),
-    PseudoLoadImm(u32),
+
+    PseudoLoadExpr(Expr),
+    Expr(Expr),
+
     StringBytes(Vec<u8>),
 
     // TODO: Unused field
@@ -593,13 +646,7 @@ fn parse_operands_for_mnemonic<'a>(
             let (input, _) = (sp, char(','), sp).parse(input)?;
             let (input, op2) = alt((
                 map(memory, Operand::Memory),
-                preceded(
-                    char('='),
-                    alt((
-                        map(immediate, Operand::PseudoLoadImm),
-                        map(label_name, Operand::PseudoLoadLabel),
-                    )),
-                ),
+                preceded(char('='), map(parse_expr, Operand::PseudoLoadExpr)),
                 map(label_name, Operand::Label),
             ))
             .parse(input)?;
@@ -791,7 +838,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                 ));
             }
             "align" => {
-                let (rest, val) = immediate(rest)?;
+                let (rest, expr) = parse_expr(rest)?;
                 return Ok((
                     rest,
                     Statement {
@@ -799,7 +846,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                         mnemonic: Mnemonic::Align,
                         condition: Condition::Al,
                         s_flag: false,
-                        operands: vec![Operand::Imm(val)],
+                        operands: vec![Operand::Expr(expr)],
                         line: 0,
                     },
                 ));
@@ -838,11 +885,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                 ));
             }
             "word" | "long" | "int" => {
-                let (rest, op) = alt((
-                    map(immediate, Operand::Imm),
-                    map(label_name, Operand::Label),
-                ))
-                .parse(rest)?;
+                let (rest, expr) = parse_expr(rest)?;
                 return Ok((
                     rest,
                     Statement {
@@ -850,17 +893,13 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                         mnemonic: Mnemonic::Word,
                         condition: Condition::Al,
                         s_flag: false,
-                        operands: vec![op],
+                        operands: vec![Operand::Expr(expr)],
                         line: 0,
                     },
                 ));
             }
             "short" | "hword" => {
-                let (rest, op) = alt((
-                    map(immediate, Operand::Imm),
-                    map(label_name, Operand::Label),
-                ))
-                .parse(rest)?;
+                let (rest, expr) = parse_expr(rest)?;
                 return Ok((
                     rest,
                     Statement {
@@ -868,29 +907,13 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                         mnemonic: Mnemonic::Short,
                         condition: Condition::Al,
                         s_flag: false,
-                        operands: vec![op],
-                        line: 0,
-                    },
-                ));
-            }
-            "space" | "skip" => {
-                let (rest, size) = immediate(rest)?;
-                // Optional fill value (defaults to 0 if omitted)
-                let (rest, fill) = opt(preceded((sp, char(','), sp), immediate)).parse(rest)?;
-                return Ok((
-                    rest,
-                    Statement {
-                        label,
-                        mnemonic: Mnemonic::Space,
-                        condition: Condition::Al,
-                        s_flag: false,
-                        operands: vec![Operand::Imm(size), Operand::Imm(fill.unwrap_or(0))],
+                        operands: vec![Operand::Expr(expr)],
                         line: 0,
                     },
                 ));
             }
             "byte" => {
-                let (rest, val) = immediate(rest)?;
+                let (rest, expr) = parse_expr(rest)?;
                 return Ok((
                     rest,
                     Statement {
@@ -898,7 +921,25 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                         mnemonic: Mnemonic::Byte,
                         condition: Condition::Al,
                         s_flag: false,
-                        operands: vec![Operand::Imm(val)],
+                        operands: vec![Operand::Expr(expr)],
+                        line: 0,
+                    },
+                ));
+            }
+            "space" | "skip" => {
+                let (rest, expr) = parse_expr(rest)?;
+                let (rest, fill) = opt(preceded((sp, char(','), sp), parse_expr)).parse(rest)?;
+                return Ok((
+                    rest,
+                    Statement {
+                        label,
+                        mnemonic: Mnemonic::Space,
+                        condition: Condition::Al,
+                        s_flag: false,
+                        operands: vec![
+                            Operand::Expr(expr),
+                            Operand::Expr(fill.unwrap_or(Expr::Number(0))),
+                        ],
                         line: 0,
                     },
                 ));

@@ -1,6 +1,6 @@
 use crate::encoder::*;
 use crate::error::AsmError;
-use crate::parser::{Mnemonic, Operand, Statement, parse_statement};
+use crate::parser::{Expr, Mnemonic, Operand, Statement, parse_statement};
 use crate::resolver::{NoSymbolResolver, SymbolResolver};
 use std::collections::HashMap;
 
@@ -62,11 +62,9 @@ impl Encoder {
         let mut pool_id = 0;
 
         for stmt in &mut statements {
-            if matches!(stmt.mnemonic, Mnemonic::Ldr)
-                && let Some(op) = stmt.operands.get(1).cloned()
-            {
-                match op {
-                    Operand::PseudoLoadLabel(lbl) => {
+            if matches!(stmt.mnemonic, Mnemonic::Ldr) {
+                if let Some(op) = stmt.operands.get(1).cloned() {
+                    if let Operand::PseudoLoadExpr(expr) = op {
                         let pool_lbl = format!("__pool_{}", pool_id);
                         pool_id += 1;
                         pool_entries.push(Statement {
@@ -74,25 +72,11 @@ impl Encoder {
                             mnemonic: Mnemonic::Word,
                             condition: Condition::Al,
                             s_flag: false,
-                            operands: vec![Operand::Label(lbl)],
+                            operands: vec![Operand::Expr(expr)],
                             line: stmt.line,
                         });
                         stmt.operands[1] = Operand::Label(pool_lbl);
                     }
-                    Operand::PseudoLoadImm(val) => {
-                        let pool_lbl = format!("__pool_{}", pool_id);
-                        pool_id += 1;
-                        pool_entries.push(Statement {
-                            label: Some(pool_lbl.clone()),
-                            mnemonic: Mnemonic::Word,
-                            condition: Condition::Al,
-                            s_flag: false,
-                            operands: vec![Operand::Imm(val)],
-                            line: stmt.line,
-                        });
-                        stmt.operands[1] = Operand::Label(pool_lbl);
-                    }
-                    _ => {}
                 }
             }
         }
@@ -122,20 +106,49 @@ impl Encoder {
                 Mnemonic::Byte => 1,
                 Mnemonic::Short => 2,
                 Mnemonic::Space => {
-                    if let Operand::Imm(size) = stmt.operands[0] {
-                        size
+                    if let Operand::Expr(expr) = &stmt.operands[0] {
+                        match eval_expr(expr, &label_map, &self.options, current_addr) {
+                            Ok(size) => {
+                                if size < 0 {
+                                    return Err(AsmError::ParseError {
+                                        line: stmt.line,
+                                        col: 0,
+                                        message: "negative space size".into(),
+                                    });
+                                }
+                                size as u32
+                            }
+                            Err(e) => {
+                                return Err(AsmError::ParseError {
+                                    line: stmt.line,
+                                    col: 0,
+                                    message: e,
+                                });
+                            }
+                        }
                     } else {
                         0
                     }
                 }
                 Mnemonic::Float => 4,
                 Mnemonic::Align => {
-                    if let Operand::Imm(val) = stmt.operands[0] {
-                        let align_bytes = 1 << val;
-                        if current_addr.is_multiple_of(align_bytes) {
-                            0
-                        } else {
-                            align_bytes - (current_addr % align_bytes)
+                    if let Operand::Expr(expr) = &stmt.operands[0] {
+                        match eval_expr(expr, &label_map, &self.options, current_addr) {
+                            Ok(val) => {
+                                let align_bytes = 1 << val;
+                                if current_addr % align_bytes == 0 {
+                                    0
+                                } else {
+                                    align_bytes - (current_addr % align_bytes)
+                                }
+                            }
+                            Err(e) => {
+                                return Err(AsmError::ParseError {
+                                    line: stmt.line,
+                                    col: 0,
+                                    message: e,
+                                });
+                            }
                         }
                     } else {
                         0
@@ -173,31 +186,51 @@ impl Encoder {
                     continue;
                 }
                 Mnemonic::Byte => {
-                    if let Operand::Imm(val) = stmt.operands[0] {
-                        bytes.push(val as u8);
+                    if let Operand::Expr(expr) = &stmt.operands[0] {
+                        let val = eval_expr(expr, &label_map, &self.options, current_addr)
+                            .unwrap_or(0) as u8;
+                        bytes.push(val);
                         current_addr += 1;
                     }
                     continue;
                 }
                 Mnemonic::Short => {
-                    let val = match &stmt.operands[0] {
-                        Operand::Imm(v) => *v as u16,
-                        Operand::Label(lbl) => *label_map.get(lbl).unwrap_or(&0) as u16,
-                        _ => 0,
-                    };
-                    match self.options.endian {
-                        Endian::Big => bytes.extend_from_slice(&val.to_be_bytes()),
-                        Endian::Little => bytes.extend_from_slice(&val.to_le_bytes()),
+                    if let Operand::Expr(expr) = &stmt.operands[0] {
+                        let val = eval_expr(expr, &label_map, &self.options, current_addr)
+                            .unwrap_or(0) as u16;
+                        match self.options.endian {
+                            Endian::Big => bytes.extend_from_slice(&val.to_be_bytes()),
+                            Endian::Little => bytes.extend_from_slice(&val.to_le_bytes()),
+                        }
+                        current_addr += 2;
                     }
-                    current_addr += 2;
                     continue;
                 }
                 Mnemonic::Space => {
-                    if let (Operand::Imm(size), Operand::Imm(fill)) =
+                    if let (Operand::Expr(size_expr), Operand::Expr(fill_expr)) =
                         (&stmt.operands[0], &stmt.operands[1])
                     {
-                        bytes.resize(bytes.len() + (*size as usize), *fill as u8);
-                        current_addr += *size;
+                        let size = eval_expr(size_expr, &label_map, &self.options, current_addr)
+                            .unwrap_or(0) as usize;
+                        let fill = eval_expr(fill_expr, &label_map, &self.options, current_addr)
+                            .unwrap_or(0) as u8;
+                        bytes.resize(bytes.len() + size, fill);
+                        current_addr += size as u32;
+                    }
+                    continue;
+                }
+                Mnemonic::Align => {
+                    if let Operand::Expr(expr) = &stmt.operands[0] {
+                        let val =
+                            eval_expr(expr, &label_map, &self.options, current_addr).unwrap_or(0);
+                        let align_bytes = 1 << val;
+                        let pad = if current_addr % align_bytes == 0 {
+                            0
+                        } else {
+                            align_bytes - (current_addr % align_bytes)
+                        };
+                        bytes.resize(bytes.len() + pad as usize, 0);
+                        current_addr += pad;
                     }
                     continue;
                 }
@@ -209,19 +242,6 @@ impl Encoder {
                             Endian::Little => bytes.extend_from_slice(&word.to_le_bytes()),
                         }
                         current_addr += 4;
-                    }
-                    continue;
-                }
-                Mnemonic::Align => {
-                    if let Operand::Imm(val) = stmt.operands[0] {
-                        let align_bytes = 1 << val;
-                        let pad = if current_addr.is_multiple_of(align_bytes) {
-                            0
-                        } else {
-                            align_bytes - (current_addr % align_bytes)
-                        };
-                        bytes.resize(bytes.len() + pad as usize, 0);
-                        current_addr += pad;
                     }
                     continue;
                 }
@@ -279,6 +299,31 @@ fn process_line(line: &str) -> String {
         line[..pos].to_string()
     } else {
         line.to_string()
+    }
+}
+
+pub fn eval_expr(
+    expr: &Expr,
+    labels: &HashMap<String, u32>,
+    options: &AssemblerOptions,
+    current_addr: u32,
+) -> Result<i32, String> {
+    match expr {
+        Expr::Number(n) => Ok(*n),
+        Expr::CurrentAddress => Ok(current_addr as i32),
+        Expr::Symbol(s) => {
+            if let Some(&v) = labels.get(s) {
+                Ok(v as i32)
+            } else if let Some(v) = options.symbol_resolver.resolve(s) {
+                Ok(v as i32)
+            } else {
+                Err(format!("undefined label '{}' in expression", s))
+            }
+        }
+        Expr::Add(l, r) => Ok(eval_expr(l, labels, options, current_addr)?
+            + eval_expr(r, labels, options, current_addr)?),
+        Expr::Sub(l, r) => Ok(eval_expr(l, labels, options, current_addr)?
+            - eval_expr(r, labels, options, current_addr)?),
     }
 }
 
@@ -642,13 +687,18 @@ fn translate_statement(
         }
         Mnemonic::Word => {
             let val = match &stmt.operands[0] {
-                Operand::Imm(v) => *v,
-                Operand::Label(label) => resolve_label(label, labels, options, stmt.line)?,
+                Operand::Expr(expr) => {
+                    eval_expr(expr, labels, options, addr).map_err(|e| AsmError::ParseError {
+                        line: stmt.line,
+                        col: 0,
+                        message: e,
+                    })? as u32
+                }
                 _ => {
                     return Err(AsmError::ParseError {
                         line: stmt.line,
                         col: 0,
-                        message: ".word expects immediate/label".into(),
+                        message: ".word expects expression".into(),
                     });
                 }
             };

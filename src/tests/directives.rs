@@ -11,6 +11,24 @@ fn byte_directive() {
 }
 
 #[test]
+fn padding_arithmetic() {
+    let code = r#"
+    _start:
+        mov r0, #0x10
+        .space 0x10 - (. - _start)
+        .word 0xDEADBEEF
+    "#;
+    let bytes = assemble(code).unwrap();
+    // 1 instruction = 4 bytes.
+    // space = 0x10 - (4 - 0) = 16 - 4 = 12 bytes of padding.
+    // Total bytes before word = 16.
+    // Word = 4 bytes.
+    // Total bytes = 20.
+    assert_eq!(bytes.len(), 20);
+    assert_eq!(&bytes[16..20], &[0xEF, 0xBE, 0xAD, 0xDE]);
+}
+
+#[test]
 fn memory_spacing_and_shorts() {
     let code = r#"
         .byte 0x01
