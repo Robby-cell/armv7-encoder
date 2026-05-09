@@ -4,14 +4,14 @@ use crate::assembler::assemble;
 fn word_directive() {
     let code = ".word 0xdeadbeef";
     let bytes = assemble(code).unwrap();
-    assert_eq!(bytes, vec![0xef, 0xbe, 0xad, 0xde]);
+    assert_eq!(bytes, [0xef, 0xbe, 0xad, 0xde]);
 }
 
 #[test]
 fn word_label() {
     let code = "start: .word start";
     let bytes = assemble(code).unwrap();
-    assert_eq!(bytes, vec![0x00, 0x00, 0x00, 0x00]);
+    assert_eq!(bytes, [0x00, 0x00, 0x00, 0x00]);
 }
 
 #[test]

@@ -3,7 +3,7 @@ use crate::error::AsmError;
 use crate::resolver::{FnSymbolResolver, HashMapSymbolResolver};
 use crate::symbols;
 
-// ── Fn‑based resolver tests ──────────────────────────────────────────
+// Fn‑based resolver tests
 
 #[test]
 fn external_symbol_branch() {
@@ -19,7 +19,7 @@ fn external_symbol_branch() {
         ..AssemblerOptions::default()
     };
     let bytes = assemble_with_options(code, options).unwrap();
-    assert_eq!(bytes, vec![0xfe, 0x03, 0x00, 0xea]);
+    assert_eq!(bytes, [0xfe, 0x03, 0x00, 0xea]);
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn external_symbol_word() {
         ..AssemblerOptions::default()
     };
     let bytes = assemble_with_options(code, options).unwrap();
-    assert_eq!(bytes, vec![0xef, 0xbe, 0xad, 0xde]);
+    assert_eq!(bytes, [0xef, 0xbe, 0xad, 0xde]);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn external_symbol_bl() {
         ..AssemblerOptions::default()
     };
     let bytes = assemble_with_options(code, options).unwrap();
-    assert_eq!(bytes, vec![0xfe, 0x07, 0x00, 0xeb]);
+    assert_eq!(bytes, [0xfe, 0x07, 0x00, 0xeb]);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn local_label_overrides_resolver() {
         ..AssemblerOptions::default()
     };
     let bytes = assemble_with_options(code, options).unwrap();
-    assert_eq!(&bytes[0..4], &[0xff, 0xff, 0xff, 0xea]);
+    assert_eq!(bytes[0..4], [0xff, 0xff, 0xff, 0xea]);
 }
 
 #[test]
@@ -94,10 +94,10 @@ fn resolver_not_called_for_defined_label() {
         ..AssemblerOptions::default()
     };
     let bytes = assemble_with_options(code, options).unwrap();
-    assert_eq!(bytes, vec![0xfe, 0xff, 0xff, 0xea]);
+    assert_eq!(bytes, [0xfe, 0xff, 0xff, 0xea]);
 }
 
-// ── HashMap‑based resolver tests ─────────────────────────────────────
+// HashMap‑based resolver tests
 
 #[test]
 fn hashmap_resolver_works() {
@@ -110,7 +110,7 @@ fn hashmap_resolver_works() {
     let code = "bl puts";
     let bytes = assemble_with_options(code, options).unwrap();
     // PC = 0+8 = 8, target = 0x1000, offset = (0x1000-8)/4 = 0x3FE
-    assert_eq!(bytes, vec![0xfe, 0x03, 0x00, 0xeb]);
+    assert_eq!(bytes, [0xfe, 0x03, 0x00, 0xeb]);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn hashmap_missing_symbol_errors() {
     assert!(matches!(err, AsmError::UndefinedLabel { .. }));
 }
 
-// ── No‑op resolver ────────────────────────────────────────────────────
+// No‑op resolver
 
 #[test]
 fn noop_resolver_errors() {

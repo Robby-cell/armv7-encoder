@@ -44,7 +44,7 @@ turn_off:
 
     let bytes = assemble_with_options(source, options).unwrap();
 
-    let expected = vec![
+    let expected = [
         0, 32, 160, 227, // MOV R2, #0
         76, 0, 159, 229, // LDR R0, [PC, #76]  – first literal pool entry
         7, 0, 0, 235, // BL turn_on
