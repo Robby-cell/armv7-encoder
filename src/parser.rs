@@ -337,6 +337,8 @@ pub enum Mnemonic {
     Asciz,
     Word,
     Byte,
+    Short,
+    Space,
     LabelOnly,
     It,
     Float,
@@ -835,7 +837,7 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                     },
                 ));
             }
-            "word" | "long" => {
+            "word" | "long" | "int" => {
                 let (rest, op) = alt((
                     map(immediate, Operand::Imm),
                     map(label_name, Operand::Label),
@@ -849,6 +851,40 @@ fn parse_statement_inner(input: &str) -> IResult<&str, Statement> {
                         condition: Condition::Al,
                         s_flag: false,
                         operands: vec![op],
+                        line: 0,
+                    },
+                ));
+            }
+            "short" | "hword" => {
+                let (rest, op) = alt((
+                    map(immediate, Operand::Imm),
+                    map(label_name, Operand::Label),
+                ))
+                .parse(rest)?;
+                return Ok((
+                    rest,
+                    Statement {
+                        label,
+                        mnemonic: Mnemonic::Short,
+                        condition: Condition::Al,
+                        s_flag: false,
+                        operands: vec![op],
+                        line: 0,
+                    },
+                ));
+            }
+            "space" | "skip" => {
+                let (rest, size) = immediate(rest)?;
+                // Optional fill value (defaults to 0 if omitted)
+                let (rest, fill) = opt(preceded((sp, char(','), sp), immediate)).parse(rest)?;
+                return Ok((
+                    rest,
+                    Statement {
+                        label,
+                        mnemonic: Mnemonic::Space,
+                        condition: Condition::Al,
+                        s_flag: false,
+                        operands: vec![Operand::Imm(size), Operand::Imm(fill.unwrap_or(0))],
                         line: 0,
                     },
                 ));

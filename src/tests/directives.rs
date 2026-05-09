@@ -11,6 +11,29 @@ fn byte_directive() {
 }
 
 #[test]
+fn memory_spacing_and_shorts() {
+    let code = r#"
+        .byte 0x01
+        .space 2, 0xFF
+        .short 0x1234
+        .int 0xDEADBEEF
+    "#;
+    let bytes = assemble(code).unwrap();
+
+    // Total size: 1 byte + 2 bytes space + 2 bytes short + 4 bytes int = 9 bytes
+    assert_eq!(bytes.len(), 9);
+
+    // 1 byte
+    assert_eq!(bytes[0], 0x01);
+    // .space 2 bytes padded with 0xFF
+    assert_eq!(&bytes[1..3], &[0xFF, 0xFF]);
+    // .short 0x1234 (little endian)
+    assert_eq!(&bytes[3..5], &[0x34, 0x12]);
+    // .int / .long / .word 0xDEADBEEF (little endian)
+    assert_eq!(&bytes[5..9], &[0xEF, 0xBE, 0xAD, 0xDE]);
+}
+
+#[test]
 fn word_directive() {
     let code = ".word 0xdeadbeef";
     let bytes = assemble(code).unwrap();

@@ -120,6 +120,14 @@ impl Encoder {
                 | Mnemonic::Data
                 | Mnemonic::It => 0,
                 Mnemonic::Byte => 1,
+                Mnemonic::Short => 2,
+                Mnemonic::Space => {
+                    if let Operand::Imm(size) = stmt.operands[0] {
+                        size
+                    } else {
+                        0
+                    }
+                }
                 Mnemonic::Float => 4,
                 Mnemonic::Align => {
                     if let Operand::Imm(val) = stmt.operands[0] {
@@ -168,6 +176,28 @@ impl Encoder {
                     if let Operand::Imm(val) = stmt.operands[0] {
                         bytes.push(val as u8);
                         current_addr += 1;
+                    }
+                    continue;
+                }
+                Mnemonic::Short => {
+                    let val = match &stmt.operands[0] {
+                        Operand::Imm(v) => *v as u16,
+                        Operand::Label(lbl) => *label_map.get(lbl).unwrap_or(&0) as u16,
+                        _ => 0,
+                    };
+                    match self.options.endian {
+                        Endian::Big => bytes.extend_from_slice(&val.to_be_bytes()),
+                        Endian::Little => bytes.extend_from_slice(&val.to_le_bytes()),
+                    }
+                    current_addr += 2;
+                    continue;
+                }
+                Mnemonic::Space => {
+                    if let (Operand::Imm(size), Operand::Imm(fill)) =
+                        (&stmt.operands[0], &stmt.operands[1])
+                    {
+                        bytes.resize(bytes.len() + (*size as usize), *fill as u8);
+                        current_addr += *size;
                     }
                     continue;
                 }
@@ -269,6 +299,8 @@ fn translate_statement(
         | Mnemonic::Asciz
         | Mnemonic::It
         | Mnemonic::Byte
+        | Mnemonic::Short
+        | Mnemonic::Space
         | Mnemonic::Float => unreachable!(),
 
         Mnemonic::DataProcessing(opcode) => {
