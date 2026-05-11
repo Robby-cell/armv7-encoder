@@ -1,7 +1,7 @@
 # ARMv7 Assembler in Rust
 
 A pure-Rust library that translates ARMv7 (A32) assembly text into machine code.  
-**No native dependencies** – compiles natively and to WebAssembly via `wasm-pack`.
+**No native dependencies**.
 
 <!-- [![Crates.io](https://img.shields.io/crates/v/armv7-encoder?style=flat-square)](https://crates.io/crates/armv7-encoder) -->
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -67,7 +67,7 @@ Add the library to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-armv7-encoder = { git = "https://github.com/Robby-cell/armv7-encoder.git", tag = "0.3.5" }
+armv7-encoder = { git = "https://github.com/Robby-cell/armv7-encoder.git", branch = "main" } # or tag = "x.y.z"
 ```
 
 Then assemble some code:
@@ -214,31 +214,6 @@ match assemble(source) {
     Err(AsmError::ImmediateOutOfRange { line, value }) => …,
     …
 }
-```
-
----
-
-## WebAssembly Usage
-
-Build with `wasm-pack`:
-
-```bash
-wasm-pack build --target web --features wasm
-```
-
-Then use in JavaScript:
-
-```javascript
-import {Endian, Encoder} from './pkg/armv7_encoder.js'
-
-const e = new Encoder(0, Endian.Little, (s) => {
-    switch (s) {
-        case "foo": return 0x1234
-        default: return null
-    }
-})
-const bytes = e.assemble("ldr r0, =foo; add r0, r0, #42; svc 0")
-console.log(bytes)
 ```
 
 ---

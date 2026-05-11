@@ -8,9 +8,6 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-wasm = ["wasm-bindgen", "js-sys"]
 
 [dependencies]
 nom = "8.0"
-wasm-bindgen = { version = "0.2", optional = true }
-js-sys = { version = "0.3", optional = true }

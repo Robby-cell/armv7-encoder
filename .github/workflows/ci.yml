@@ -32,25 +32,3 @@ jobs:
 
       - name: Test
         run: cargo test --verbose
-
-  wasm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable with wasm target
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build for wasm
-        run: cargo build --target wasm32-unknown-unknown --verbose
-
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: wasm-pack build
-        run: wasm-pack build --target web --features wasm

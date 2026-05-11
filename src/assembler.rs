@@ -62,22 +62,20 @@ impl Encoder {
         let mut pool_id = 0;
 
         for stmt in &mut statements {
-            if matches!(stmt.mnemonic, Mnemonic::Ldr) {
-                if let Some(op) = stmt.operands.get(1).cloned() {
-                    if let Operand::PseudoLoadExpr(expr) = op {
-                        let pool_lbl = format!("__pool_{}", pool_id);
-                        pool_id += 1;
-                        pool_entries.push(Statement {
-                            label: Some(pool_lbl.clone()),
-                            mnemonic: Mnemonic::Word,
-                            condition: Condition::Al,
-                            s_flag: false,
-                            operands: vec![Operand::Expr(expr)],
-                            line: stmt.line,
-                        });
-                        stmt.operands[1] = Operand::Label(pool_lbl);
-                    }
-                }
+            if matches!(stmt.mnemonic, Mnemonic::Ldr)
+                && let Some(Operand::PseudoLoadExpr(expr)) = stmt.operands.get(1).cloned()
+            {
+                let pool_lbl = format!("__pool_{}", pool_id);
+                pool_id += 1;
+                pool_entries.push(Statement {
+                    label: Some(pool_lbl.clone()),
+                    mnemonic: Mnemonic::Word,
+                    condition: Condition::Al,
+                    s_flag: false,
+                    operands: vec![Operand::Expr(expr)],
+                    line: stmt.line,
+                });
+                stmt.operands[1] = Operand::Label(pool_lbl);
             }
         }
 
@@ -136,7 +134,7 @@ impl Encoder {
                         match eval_expr(expr, &label_map, &self.options, current_addr) {
                             Ok(val) => {
                                 let align_bytes = 1 << val;
-                                if current_addr % align_bytes == 0 {
+                                if current_addr.is_multiple_of(align_bytes) {
                                     0
                                 } else {
                                     align_bytes - (current_addr % align_bytes)
@@ -224,7 +222,7 @@ impl Encoder {
                         let val =
                             eval_expr(expr, &label_map, &self.options, current_addr).unwrap_or(0);
                         let align_bytes = 1 << val;
-                        let pad = if current_addr % align_bytes == 0 {
+                        let pad = if current_addr.is_multiple_of(align_bytes) {
                             0
                         } else {
                             align_bytes - (current_addr % align_bytes)
