@@ -1,7 +1,7 @@
 use crate::encoder::*;
 use crate::error::AsmError;
 use crate::parser::{Expr, Mnemonic, Operand, Statement, parse_statement};
-use crate::resolver::{NoSymbolResolver, SymbolResolver};
+use crate::resolver::SymbolResolver;
 use std::collections::HashMap;
 
 /// Endianness selection with distinct discriminants.
@@ -24,29 +24,40 @@ pub struct AssembleResult {
     pub instruction_count: usize,
 }
 
-pub struct AssemblerOptions {
-    pub start_address: u32,
-    pub endian: Endian,
-    pub symbol_resolver: Box<dyn SymbolResolver>,
+struct AssemblerOptions<'a> {
+    start_address: u32,
+    endian: Endian,
+    symbol_resolver: Option<&'a mut dyn SymbolResolver>,
 }
 
-impl Default for AssemblerOptions {
-    fn default() -> Self {
-        AssemblerOptions {
-            start_address: 0,
-            endian: Endian::Little,
-            symbol_resolver: Box::new(NoSymbolResolver),
+pub struct Encoder<'a> {
+    options: AssemblerOptions<'a>,
+}
+
+impl<'a> Encoder<'a> {
+    pub fn new() -> Self {
+        Self {
+            options: AssemblerOptions {
+                start_address: 0,
+                endian: Endian::Little,
+                symbol_resolver: None,
+            },
         }
     }
-}
 
-pub struct Encoder {
-    pub options: AssemblerOptions,
-}
+    pub fn start_address(mut self, addr: u32) -> Self {
+        self.options.start_address = addr;
+        self
+    }
 
-impl Encoder {
-    pub fn new(options: AssemblerOptions) -> Self {
-        Self { options }
+    pub fn endian(mut self, endian: Endian) -> Self {
+        self.options.endian = endian;
+        self
+    }
+
+    pub fn with_resolver(mut self, resolver: &'a mut dyn SymbolResolver) -> Self {
+        self.options.symbol_resolver = Some(resolver);
+        self
     }
 
     pub fn assemble(&self, source: &str) -> Result<AssembleResult, AsmError> {
@@ -318,14 +329,7 @@ impl Encoder {
 }
 
 pub fn assemble(source: &str) -> Result<AssembleResult, AsmError> {
-    Encoder::new(AssemblerOptions::default()).assemble(source)
-}
-
-pub fn assemble_with_options(
-    source: &str,
-    options: AssemblerOptions,
-) -> Result<AssembleResult, AsmError> {
-    Encoder::new(options).assemble(source)
+    Encoder::new().assemble(source)
 }
 
 fn process_line(line: &str) -> String {
@@ -336,7 +340,7 @@ fn process_line(line: &str) -> String {
     }
 }
 
-pub fn eval_expr(
+fn eval_expr(
     expr: &Expr,
     labels: &HashMap<String, u32>,
     options: &AssemblerOptions,
@@ -348,7 +352,9 @@ pub fn eval_expr(
         Expr::Symbol(s) => {
             if let Some(&v) = labels.get(s) {
                 Ok(v as i32)
-            } else if let Some(v) = options.symbol_resolver.resolve(s) {
+            } else if let Some(ref resolver) = options.symbol_resolver
+                && let Some(v) = resolver.resolve(s)
+            {
                 Ok(v as i32)
             } else {
                 Err(format!("undefined label '{}' in expression", s))
@@ -870,7 +876,9 @@ fn resolve_label(
     if let Some(&addr) = local.get(name) {
         return Ok(addr);
     }
-    if let Some(addr) = options.symbol_resolver.resolve(name) {
+    if let Some(ref resolver) = options.symbol_resolver
+        && let Some(addr) = resolver.resolve(name)
+    {
         return Ok(addr);
     }
     Err(AsmError::UndefinedLabel {

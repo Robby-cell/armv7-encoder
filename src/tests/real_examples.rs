@@ -1,5 +1,4 @@
-use crate::assembler::{AssemblerOptions, assemble_with_options};
-use crate::prelude::Endian;
+use crate::assembler::Encoder;
 use crate::resolver::FnSymbolResolver;
 
 #[test]
@@ -28,7 +27,7 @@ turn_off:
     BX LR
 "#;
 
-    let resolver = FnSymbolResolver::new(|name: &str| {
+    let mut resolver = FnSymbolResolver::new(|name: &str| {
         if name == "led0" {
             Some(0x40000000)
         } else {
@@ -36,13 +35,11 @@ turn_off:
         }
     });
 
-    let options = AssemblerOptions {
-        start_address: 0,
-        endian: Endian::Little,
-        symbol_resolver: Box::new(resolver),
-    };
-
-    let bytes = assemble_with_options(source, options).unwrap().bytes;
+    let bytes = Encoder::new()
+        .with_resolver(&mut resolver)
+        .assemble(source)
+        .unwrap()
+        .bytes;
 
     let expected = [
         0, 32, 160, 227, // MOV R2, #0

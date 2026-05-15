@@ -1,4 +1,4 @@
-use crate::assembler::{AssemblerOptions, assemble, assemble_with_options};
+use crate::assembler::{Encoder, assemble};
 
 #[test]
 fn default_entry_point() {
@@ -30,12 +30,8 @@ fn detects_main_entry_point_with_offset() {
     main:
         mov r0, #1
     "#;
-    let options = AssemblerOptions {
-        start_address: 0x8000,
-        ..AssemblerOptions::default()
-    };
 
-    let result = assemble_with_options(code, options).unwrap();
+    let result = Encoder::new().start_address(0x8000).assemble(code).unwrap();
 
     // 0x8000 base + 4 bytes for the first NOP
     assert_eq!(result.entry_point, 0x8004);
