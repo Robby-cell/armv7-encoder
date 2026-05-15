@@ -42,7 +42,7 @@ turn_off:
         symbol_resolver: Box::new(resolver),
     };
 
-    let bytes = assemble_with_options(source, options).unwrap();
+    let bytes = assemble_with_options(source, options).unwrap().bytes;
 
     let expected = [
         0, 32, 160, 227, // MOV R2, #0

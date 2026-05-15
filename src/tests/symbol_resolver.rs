@@ -18,7 +18,7 @@ fn external_symbol_branch() {
         })),
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0xfe, 0x03, 0x00, 0xea]);
 }
 
@@ -35,7 +35,7 @@ fn external_symbol_word() {
         })),
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0xef, 0xbe, 0xad, 0xde]);
 }
 
@@ -52,7 +52,7 @@ fn external_symbol_bl() {
         })),
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0xfe, 0x07, 0x00, 0xeb]);
 }
 
@@ -69,7 +69,7 @@ fn local_label_overrides_resolver() {
         })),
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes[0..4], [0xff, 0xff, 0xff, 0xea]);
 }
 
@@ -93,7 +93,7 @@ fn resolver_not_called_for_defined_label() {
         })),
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0xfe, 0xff, 0xff, 0xea]);
 }
 
@@ -108,7 +108,7 @@ fn hashmap_resolver_works() {
         ..AssemblerOptions::default()
     };
     let code = "bl puts";
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     // PC = 0+8 = 8, target = 0x1000, offset = (0x1000-8)/4 = 0x3FE
     assert_eq!(bytes, [0xfe, 0x03, 0x00, 0xeb]);
 }

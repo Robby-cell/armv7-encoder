@@ -7,7 +7,7 @@ fn little_endian_mov() {
         endian: Endian::Little,
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0x01, 0x00, 0xa0, 0xe3]);
 }
 
@@ -18,7 +18,7 @@ fn big_endian_mov() {
         endian: Endian::Big,
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0xe3, 0xa0, 0x00, 0x01]);
 }
 
@@ -29,7 +29,7 @@ fn little_endian_word() {
         endian: Endian::Little,
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0x78, 0x56, 0x34, 0x12]);
 }
 
@@ -40,6 +40,6 @@ fn big_endian_word() {
         endian: Endian::Big,
         ..AssemblerOptions::default()
     };
-    let bytes = assemble_with_options(code, options).unwrap();
+    let bytes = assemble_with_options(code, options).unwrap().bytes;
     assert_eq!(bytes, [0x12, 0x34, 0x56, 0x78]);
 }

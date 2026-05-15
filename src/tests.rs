@@ -5,6 +5,7 @@ mod endianness;
 mod error_cases;
 mod math;
 mod memory;
+mod metadata;
 mod real_examples;
 mod symbol_resolver;
 mod system;

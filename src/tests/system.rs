@@ -3,7 +3,7 @@ use crate::assembler::assemble;
 #[test]
 fn test_hint_instructions() {
     let code = "wfi\nwfe\nyield\nsev\nnop";
-    let bytes = assemble(code).unwrap();
+    let bytes = assemble(code).unwrap().bytes;
     // WFI: 0xE320F003
     assert_eq!(&bytes[0..4], &[0x03, 0xf0, 0x20, 0xe3]);
     // WFE: 0xE320F002
@@ -19,7 +19,7 @@ fn test_hint_instructions() {
 #[test]
 fn test_conditional_hints() {
     let code = "wfieq\nsevne";
-    let bytes = assemble(code).unwrap();
+    let bytes = assemble(code).unwrap().bytes;
     // WFIEQ: 0x0320F003
     assert_eq!(&bytes[0..4], &[0x03, 0xf0, 0x20, 0x03]);
     // SEVNE: 0x1320F004
@@ -29,7 +29,7 @@ fn test_conditional_hints() {
 #[test]
 fn test_bkpt() {
     let code = "bkpt #0x1234\nbkpt 42";
-    let bytes = assemble(code).unwrap();
+    let bytes = assemble(code).unwrap().bytes;
     // bkpt 0x1234: 0xE1212374
     assert_eq!(&bytes[0..4], &[0x74, 0x23, 0x21, 0xe1]);
     // bkpt 42 (0x2A): 0xE120027A

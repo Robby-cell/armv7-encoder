@@ -14,6 +14,16 @@ pub enum Endian {
     Little = 0,
 }
 
+#[derive(Debug, Clone)]
+pub struct AssembleResult {
+    pub bytes: Vec<u8>,
+    pub entry_point: u64,
+    /// Maps a label/function name to its exact physical byte address (IP)
+    pub labels: HashMap<String, u64>,
+    /// Total number of physical instructions and data directives emitted
+    pub instruction_count: usize,
+}
+
 pub struct AssemblerOptions {
     pub start_address: u32,
     pub endian: Endian,
@@ -39,7 +49,7 @@ impl Encoder {
         Self { options }
     }
 
-    pub fn assemble(&self, source: &str) -> Result<Vec<u8>, AsmError> {
+    pub fn assemble(&self, source: &str) -> Result<AssembleResult, AsmError> {
         let mut statements = Vec::new();
         for (line_idx, raw_line) in source.lines().enumerate() {
             let line_num = line_idx + 1;
@@ -172,6 +182,7 @@ impl Encoder {
         }
 
         let mut bytes = Vec::new();
+        let mut instruction_count = 0;
         current_addr = self.options.start_address;
 
         for stmt in &statements {
@@ -189,6 +200,7 @@ impl Encoder {
                             .unwrap_or(0) as u8;
                         bytes.push(val);
                         current_addr += 1;
+                        instruction_count += 1;
                     }
                     continue;
                 }
@@ -201,6 +213,7 @@ impl Encoder {
                             Endian::Little => bytes.extend_from_slice(&val.to_le_bytes()),
                         }
                         current_addr += 2;
+                        instruction_count += 1;
                     }
                     continue;
                 }
@@ -214,6 +227,7 @@ impl Encoder {
                             .unwrap_or(0) as u8;
                         bytes.resize(bytes.len() + size, fill);
                         current_addr += size as u32;
+                        instruction_count += 1;
                     }
                     continue;
                 }
@@ -229,6 +243,7 @@ impl Encoder {
                         };
                         bytes.resize(bytes.len() + pad as usize, 0);
                         current_addr += pad;
+                        instruction_count += 1;
                     }
                     continue;
                 }
@@ -240,6 +255,7 @@ impl Encoder {
                             Endian::Little => bytes.extend_from_slice(&word.to_le_bytes()),
                         }
                         current_addr += 4;
+                        instruction_count += 1;
                     }
                     continue;
                 }
@@ -247,6 +263,7 @@ impl Encoder {
                     if let Operand::StringBytes(ref b) = stmt.operands[0] {
                         bytes.extend_from_slice(b);
                         current_addr += b.len() as u32;
+                        instruction_count += 1;
                     }
                     continue;
                 }
@@ -255,6 +272,7 @@ impl Encoder {
                         bytes.extend_from_slice(b);
                         bytes.push(0);
                         current_addr += (b.len() + 1) as u32;
+                        instruction_count += 1;
                     }
                     continue;
                 }
@@ -278,17 +296,35 @@ impl Encoder {
                 Endian::Little => bytes.extend_from_slice(&word.to_le_bytes()),
             }
             current_addr += 4;
+            instruction_count += 1;
         }
 
-        Ok(bytes)
+        // Smartly detect typical entry points to populate the result
+        let entry_point = label_map
+            .get("_start")
+            .or_else(|| label_map.get("main"))
+            .copied()
+            .unwrap_or(self.options.start_address) as u64;
+
+        let labels = label_map.into_iter().map(|(k, v)| (k, v as u64)).collect();
+
+        Ok(AssembleResult {
+            bytes,
+            entry_point,
+            labels,
+            instruction_count,
+        })
     }
 }
 
-pub fn assemble(source: &str) -> Result<Vec<u8>, AsmError> {
+pub fn assemble(source: &str) -> Result<AssembleResult, AsmError> {
     Encoder::new(AssemblerOptions::default()).assemble(source)
 }
 
-pub fn assemble_with_options(source: &str, options: AssemblerOptions) -> Result<Vec<u8>, AsmError> {
+pub fn assemble_with_options(
+    source: &str,
+    options: AssemblerOptions,
+) -> Result<AssembleResult, AsmError> {
     Encoder::new(options).assemble(source)
 }
 
