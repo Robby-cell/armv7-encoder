@@ -85,7 +85,7 @@ fn main() {
                 bx  lr
     "#;
 
-    let machine_code = assemble(source).unwrap();
+    let machine_code = assemble(source).unwrap().bytes;
     for byte in machine_code {
         print!("{:02X} ", byte);
     }
@@ -96,20 +96,21 @@ fn main() {
 
 ## Assembler Options
 
-You can control the output and symbol resolution via `AssemblerOptions`:
+You can control the output and symbol resolution via setting options in the `Encoder` object:
 
 ```rust
-let options = AssemblerOptions {
-    start_address: 0x8000,
-    endian: Endian::Big,
-    symbol_resolver: Box::new(my_resolver),
-};
-let bytes = assemble_with_options(source, options).unwrap();
+let bytes = Encoder::new()
+    .endian(Endian::Big)
+    .start_address(0x8000)
+    .with_resolver(my_resolver)
+    .assemble(source)
+    .unwrap()
+    .bytes;
 ```
 
 - `start_address` – base address for labels and PC‑relative calculations.
 - `endian` – `Endian::Little` (default) or `Endian::Big`.
-- `symbol_resolver` – implements `SymbolResolver` trait (see below).
+- `with_resolver` – implements `SymbolResolver` trait (see below).
 
 ---
 
