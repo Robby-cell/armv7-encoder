@@ -25,7 +25,7 @@ pub struct HashMapSymbolResolver(HashMap<String, u32>);
 macro_rules! symbols {
     (map $(($symbol:expr, $addr:expr)),+) => {
         {
-            let mut res = HashMapSymbolResolver::new();
+            let mut res = $crate::resolver::HashMapSymbolResolver::new();
             $(
                 res.insert($symbol, $addr);
             )+
@@ -38,7 +38,7 @@ macro_rules! symbols {
     };
 
     () => {
-        { HashMapSymbolResolver::new() }
+        { $crate::resolver::HashMapSymbolResolver::new() }
     }
 }
 
@@ -64,13 +64,11 @@ impl SymbolResolver for HashMapSymbolResolver {
 
 /// A resolver built from any closure/function.
 #[derive(Debug, Clone)]
-pub struct FnSymbolResolver<F> {
-    f: F,
-}
+pub struct FnSymbolResolver<F>(F);
 
 impl<F> FnSymbolResolver<F> {
     pub fn new(f: F) -> Self {
-        Self { f }
+        Self(f)
     }
 }
 
@@ -79,6 +77,6 @@ where
     F: Fn(&str) -> Option<u32>,
 {
     fn resolve(&self, name: &str) -> Option<u32> {
-        (self.f)(name)
+        (self.0)(name)
     }
 }
