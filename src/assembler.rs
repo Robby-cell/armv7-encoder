@@ -34,6 +34,12 @@ pub struct Encoder<'a> {
     options: AssemblerOptions<'a>,
 }
 
+impl<'a> Default for Encoder<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Encoder<'a> {
     pub fn new() -> Self {
         Self {
