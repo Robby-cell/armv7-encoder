@@ -23,7 +23,7 @@ pub struct HashMapSymbolResolver(HashMap<String, u32>);
 
 #[macro_export]
 macro_rules! symbols {
-    (map $(($symbol:expr, $addr:expr)),+) => {
+    (map $(($symbol:expr, $addr:expr)),+ $(,)?) => {
         {
             let mut res = $crate::resolver::HashMapSymbolResolver::new();
             $(
@@ -33,7 +33,7 @@ macro_rules! symbols {
         }
     };
 
-    ($(($symbol:expr, $addr:expr)),+) => {
+    ($(($symbol:expr, $addr:expr)),+ $(,)?) => {
         { symbols!(map $(($symbol, $addr)),+) }
     };
 
