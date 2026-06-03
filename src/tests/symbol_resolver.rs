@@ -1,6 +1,6 @@
 use crate::assembler::{Encoder, assemble};
 use crate::error::AsmError;
-use crate::resolver::{FnSymbolResolver, HashMapSymbolResolver};
+use crate::resolver::FnSymbolResolver;
 use crate::symbols;
 
 // Fn‑based resolver tests
